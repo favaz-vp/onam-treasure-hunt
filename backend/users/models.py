@@ -9,7 +9,14 @@ class Effects(models.TextChoices):
 
 
 class User(AbstractUser):
+    username = None  # Remove username field
+    email = models.EmailField(unique=True)
     team = models.ForeignKey('users.Team', on_delete=models.SET_NULL, null=True, blank=True)
+    USERNAME_FIELD = "email"
+    REQUIRED_FIELDS = []
+    
+    def __str__(self):
+        return self.email
 
 
 class Team(models.Model):

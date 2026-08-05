@@ -78,7 +78,17 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
-    }
+    },
+    "OPTIONS": {
+        # Executes whenever Django establishes a database connection
+        "init_command": (
+            "PRAGMA journal_mode=WAL;"
+            "PRAGMA synchronous=NORMAL;"
+            "PRAGMA busy_timeout=5000;"
+        ),
+        # Prevents "database is locked" errors by acquiring a write-lock immediately
+        "transaction_mode": "IMMEDIATE", 
+    },
 }
 
 
