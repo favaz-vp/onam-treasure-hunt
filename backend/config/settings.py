@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'djoser',
     'rest_framework_simplejwt',
+    'drf_spectacular',
 
     # Local apps
     'users',
@@ -145,6 +146,7 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
 # SimpleJWT Settings
@@ -173,4 +175,14 @@ DJOSER = {
         'current_user': 'djoser.serializers.UserSerializer',
     },
 }
+
+# drf-spectacular Settings (Swagger / OpenAPI 3.0)
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Onam Treasure Hunt API',
+    'DESCRIPTION': 'API documentation for Onam Treasure Hunt backend service featuring Djoser user management and JWT Authentication.',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'COMPONENT_SPLIT_REQUEST': True,
+}
+
 

@@ -59,6 +59,7 @@ class Team(models.Model):
 
 class Node(models.Model):
     data = models.TextField()
+    answer = models.TextField(default="", blank=True)
     next_node = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True)
     effects = models.CharField(default=Effects.UNLOCKED, max_length=20, choices=Effects.choices)
     score = models.IntegerField(default=10)
