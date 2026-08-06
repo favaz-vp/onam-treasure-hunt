@@ -1,5 +1,7 @@
+from django.conf import settings
 from django.db import models
 from django.contrib.auth.models import AbstractUser, BaseUserManager
+
 
 
 class Effects(models.TextChoices):
@@ -17,6 +19,18 @@ class UserManager(BaseUserManager):
         user = self.model(email=email, **extra_fields)
         user.set_password(password)
         user.save(using=self._db)
+        # Assign user to a team based on ID modulo number of teams
+        # Create teams if needed
+        from .models import Team
+        if getattr(settings, 'CREATE_TEAMS', True):
+            if Team.objects.count() == 0:
+                team_objs = [Team(name=f"Team {i+1}") for i in range(int(getattr(settings, 'TEAM_COUNT', 3)))]
+                Team.objects.bulk_create(team_objs)
+        teams = Team.objects.all()
+        if teams.exists():
+            team = teams[user.id % teams.count()]
+            user.team = team
+            user.save(update_fields=['team'])
         return user
 
     def create_superuser(self, email, password=None, **extra_fields):
