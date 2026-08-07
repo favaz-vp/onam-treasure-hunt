@@ -1,14 +1,16 @@
-from .models import Node, Effects
-from .serializers import NodeSerializer
 from rest_framework import viewsets
 from rest_framework.response import Response
+from rest_framework.decorators import action
 from drf_spectacular.utils import extend_schema
+from .services import process_submit
+from .models import Node, Effects
+from .serializers import NodeSerializer, SubmitRequestSerializer, SubmitResponseSerializer
 
 
 class NodeViewSet(viewsets.ModelViewSet):
     queryset = Node.objects.all()
     serializer_class = NodeSerializer
-    http_method_names = ['get']
+    http_method_names = ['get', 'post']
 
     def retrieve(self, request, *args, **kwargs):
 
@@ -44,4 +46,23 @@ class NodeViewSet(viewsets.ModelViewSet):
     @extend_schema(exclude=True)
     def list(self, request, *args, **kwargs):
         return Response({'detail': 'Method "GET" not allowed.'}, status=405)
+    
+    @extend_schema(exclude=True)
+    def create(self, request, *args, **kwargs):
+        return Response({'detail': 'Method "POST" not allowed.'}, status=405)
 
+    @action(detail=True, methods=['post'], url_path='submit')
+    @extend_schema(
+        request=SubmitRequestSerializer,
+        responses={
+            200: SubmitResponseSerializer,
+            400: SubmitResponseSerializer,
+            404: SubmitResponseSerializer,
+        },
+    )
+    def submit(self, request, pk):
+        serializer_req = SubmitRequestSerializer(data=request.data)
+        if not serializer_req.is_valid():
+            return Response(serializer_req.errors, status=400)
+        status_code, resp_serializer = process_submit(request.user, pk)
+        return Response(resp_serializer.data, status=status_code)
