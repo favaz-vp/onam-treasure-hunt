@@ -1,3 +1,5 @@
+from .models import Node, Effects, TeamNode
+from .serializers import NodeSerializer
 from rest_framework import viewsets
 from rest_framework.response import Response
 from rest_framework.decorators import action
@@ -41,6 +43,8 @@ class NodeViewSet(viewsets.ModelViewSet):
             )
 
         serializer = self.get_serializer(node)
+        # Record node visit for this team
+        TeamNode.objects.get_or_create(team=team, node=node)
         return Response(serializer.data)
 
     @extend_schema(exclude=True)
