@@ -31,3 +31,11 @@ class CustomUserSerializer(DjoserUserSerializer):
 
     class Meta(DjoserUserSerializer.Meta):
         fields = DjoserUserSerializer.Meta.fields + ('team',)
+
+class SubmitRequestSerializer(serializers.Serializer):
+    # No body required
+    pass
+
+class SubmitResponseSerializer(serializers.Serializer):
+    detail = serializers.CharField()
+    data = serializers.JSONField(required=False)
