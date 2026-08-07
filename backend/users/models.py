@@ -49,6 +49,7 @@ class User(AbstractUser):
     username = None  # Remove username field
     email = models.EmailField(unique=True)
     team = models.ForeignKey('users.Team', on_delete=models.SET_NULL, null=True, blank=True)
+    is_captain = models.BooleanField(default=False)
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = []
 
