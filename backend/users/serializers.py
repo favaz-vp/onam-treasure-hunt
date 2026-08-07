@@ -11,7 +11,7 @@ class NodeSerializer(serializers.ModelSerializer):
         model = Node
         fields = ['id', 'data', 'clue', 'effects', 'score', 'bonus', 'created_at']
 
-    def get_clue(self, obj):
+    def get_clue(self, obj) -> str:
         return ("_ " * len(obj.answer))[:-1]
 
 class TeamMemberSerializer(serializers.ModelSerializer):
