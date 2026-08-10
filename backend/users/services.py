@@ -1,9 +1,12 @@
 from typing import Tuple
 from rest_framework import serializers
-
-from .models import Node, Effects
+from django.conf import settings
+from .models import Node, Effects, TeamNode
 from .serializers import NodeSerializer, TeamSerializer, SubmitResponseSerializer
 
+
+def _record_node_visit(team, node):
+    TeamNode.objects.get_or_create(team=team, node=node)
 
 def process_submit(user, node_id) -> Tuple[int, serializers.Serializer]:
     """Process a submit request"""
@@ -19,22 +22,16 @@ def process_submit(user, node_id) -> Tuple[int, serializers.Serializer]:
     if not current_node:
         team.current_node = node
         team.head = node
+        team.last_checkpoint = node
         team.save()
+        _record_node_visit(team, node)
         data_serializer = NodeSerializer(node)
         resp = SubmitResponseSerializer({"detail": "Success", "data": data_serializer.data})
         return 200, resp
 
-    # Win condition – when the next node points back to the head
-    if current_node.next_node == team.head:
-        team.score += node.score
-        team.save()
-        team_serializer = TeamSerializer(team)
-        resp = SubmitResponseSerializer({"detail": "You Win!", "data": team_serializer.data})
-        return 200, resp
-
     # Wrong answer
     if current_node.next_node_id != node.id:
-        team.life -= 1
+        team.life = max(1, team.life - 1)
         team.current_node = team.last_checkpoint
         team.save()
         resp = SubmitResponseSerializer({"detail": "Wrong answer"})
@@ -44,8 +41,18 @@ def process_submit(user, node_id) -> Tuple[int, serializers.Serializer]:
     team.current_node = node
     if node.effects == Effects.JUNCTION:
         team.last_checkpoint = node
-    team.score += node.score
+    if not TeamNode.objects.filter(team=team, node=node).exists():
+        max_health = getattr(settings, "MAX_TEAM_HEALTH", 5)
+        team.score += node.score
+        if team.life < max_health:
+            team.life += 1
     team.save()
+    _record_node_visit(team, node)
+    # Win condition – when the next node points back to the head
+    if node.next_node == team.head:
+        team_serializer = TeamSerializer(team)
+        resp = SubmitResponseSerializer({"detail": "You Win!", "data": team_serializer.data})
+        return 200, resp
     data_serializer = NodeSerializer(node)
     resp = SubmitResponseSerializer({"detail": "Success", "data": data_serializer.data})
     return 200, resp

@@ -3,7 +3,6 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 
 
-
 class Effects(models.TextChoices):
     JUNCTION = 'JUNCTION', 'Junction'
     KEY = 'KEY', 'Key'
@@ -24,7 +23,7 @@ class UserManager(BaseUserManager):
         from .models import Team
         if getattr(settings, 'CREATE_TEAMS', True):
             if Team.objects.count() == 0:
-                team_objs = [Team(name=f"Team {i+1}") for i in range(int(getattr(settings, 'TEAM_COUNT', 3)))]
+                team_objs = [Team(name=f"Team {i+1}", life=getattr(settings, "MAX_TEAM_HEALTH", 5)) for i in range(int(getattr(settings, 'TEAM_COUNT', 3)))]
                 Team.objects.bulk_create(team_objs)
         teams = Team.objects.all()
         if teams.exists():
@@ -61,7 +60,7 @@ class User(AbstractUser):
 
 class Team(models.Model):
     name = models.CharField(max_length=100)
-    life = models.IntegerField(default=3)
+    life = models.IntegerField(default=5)
     score = models.IntegerField(default=0)
     head = models.ForeignKey('users.Node', on_delete=models.SET_NULL, null=True, blank=True)
     current_node = models.ForeignKey('users.Node', on_delete=models.SET_NULL, null=True, blank=True, related_name='current_node')
