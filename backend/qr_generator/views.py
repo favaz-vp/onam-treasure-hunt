@@ -115,7 +115,7 @@ class GenerateNodeCSVView(APIView):
 
         writer.writerow(
             [
-                "title",
+                "id",
                 "caption",
             ]
         )
@@ -124,7 +124,7 @@ class GenerateNodeCSVView(APIView):
 
         for node in nodes:
 
-            next_node_data = node.next_node.data if node.next_node else ""
+            next_node_data = node.next_node.id if node.next_node else ""
 
             writer.writerow(
                 [

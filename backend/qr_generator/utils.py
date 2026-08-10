@@ -15,34 +15,49 @@ from reportlab.lib.colors import black, white
 
 # Landscape page:
 # 150 mm width × 100 mm height
+
 PAGE_WIDTH = 150 * mm
 PAGE_HEIGHT = 100 * mm
 
-# QR code size
+
+# ==========================================================
+# QR CONFIGURATION
+# ==========================================================
+
 QR_SIZE = 48 * mm
 
-# Top margin
-TOP_MARGIN = 8 * mm
+
+# ==========================================================
+# CAPTION CONFIGURATION
+# ==========================================================
 
 # Gap between QR and caption box
 CAPTION_GAP = 6 * mm
 
 # Caption font
 FONT_NAME = "Helvetica-Bold"
-FONT_SIZE = 15
+FONT_SIZE = 12
 
-# Caption wrapping
-MAX_CHARS_PER_LINE = 15
+# Maximum characters per line
+MAX_CHARS_PER_LINE = 20
 
-# Caption box
-BOX_HEIGHT = 12 * mm
-BOX_WIDTH = QR_SIZE
-BOX_RADIUS = 2.5 * mm
+# Space inside caption box
 BOX_PADDING = 5 * mm
 
-# Divider
+# Caption box width = QR width
+BOX_WIDTH = QR_SIZE
+
+# Rounded corner radius
+BOX_RADIUS = 2.5 * mm
+
+
+# ==========================================================
+# DIVIDER CONFIGURATION
+# ==========================================================
+
 DIVIDER_COLOR = white
 DIVIDER_WIDTH = 1
+
 DIVIDER_TOP_MARGIN = 8 * mm
 DIVIDER_BOTTOM_MARGIN = 8 * mm
 
@@ -56,8 +71,11 @@ def generate_qr(data):
     """
     Generate an inverted QR code.
 
-    White QR code
-    Black background
+    QR:
+        White
+
+    Background:
+        Black
 
     Returns:
         PIL Image
@@ -71,6 +89,7 @@ def generate_qr(data):
     )
 
     qr.add_data(data)
+
     qr.make(fit=True)
 
     image = qr.make_image(
@@ -110,10 +129,12 @@ def draw_background(pdf):
 
 def draw_divider(pdf):
     """
-    Draw vertical white divider between the two QR codes.
+    Draw vertical white divider between
+    the two QR code sections.
     """
 
     pdf.setStrokeColor(DIVIDER_COLOR)
+
     pdf.setLineWidth(DIVIDER_WIDTH)
 
     divider_x = PAGE_WIDTH / 2
@@ -131,7 +152,12 @@ def draw_divider(pdf):
 # ==========================================================
 
 
-def draw_qr(pdf, image, qr_x, qr_y):
+def draw_qr(
+    pdf,
+    image,
+    qr_x,
+    qr_y,
+):
     """
     Draw QR image on PDF.
     """
@@ -157,6 +183,49 @@ def draw_qr(pdf, image, qr_x, qr_y):
 
 
 # ==========================================================
+# GET CAPTION LINES
+# ==========================================================
+
+
+def get_caption_lines(caption):
+    """
+    Wrap caption into multiple lines.
+
+    Returns:
+        list[str]
+    """
+
+    if not caption:
+        return []
+
+    return textwrap.wrap(
+        caption,
+        width=MAX_CHARS_PER_LINE,
+        break_long_words=True,
+        break_on_hyphens=False,
+    )
+
+
+# ==========================================================
+# CALCULATE CAPTION BOX HEIGHT
+# ==========================================================
+
+
+def get_caption_box_height(lines):
+    """
+    Calculate caption box height based
+    on the number of text lines.
+    """
+
+    if not lines:
+        return 0
+
+    line_height = FONT_SIZE + 4
+
+    return len(lines) * line_height + 2 * BOX_PADDING
+
+
+# ==========================================================
 # DRAW CAPTION BOX
 # ==========================================================
 
@@ -168,46 +237,37 @@ def draw_caption_box(
     qr_y,
 ):
     """
-    Draw caption inside one single filled white box.
+    Draw caption inside ONE white box.
 
-    The box width matches the QR width.
-    If the caption wraps into multiple lines,
-    the box height automatically increases.
+    The box width is exactly the same
+    as the QR width.
+
+    Multiple caption lines remain inside
+    the same box.
+
+    Text is centered both horizontally
+    and vertically.
     """
 
-    pdf.setFont(
-        FONT_NAME,
-        FONT_SIZE,
-    )
-
-    # ------------------------------------------
-    # Wrap caption into multiple lines
-    # ------------------------------------------
-
-    lines = textwrap.wrap(
-        caption,
-        width=MAX_CHARS_PER_LINE,
-    )
+    lines = get_caption_lines(caption)
 
     if not lines:
         return
 
     # ------------------------------------------
-    # Calculate box height dynamically
+    # Calculate box height
     # ------------------------------------------
 
-    line_height = FONT_SIZE + 4
-
-    box_height = len(lines) * line_height + 2 * BOX_PADDING
+    box_height = get_caption_box_height(lines)
 
     # ------------------------------------------
-    # Box position
+    # Calculate box Y position
     # ------------------------------------------
 
     box_y = qr_y - CAPTION_GAP - box_height
 
     # ------------------------------------------
-    # Draw ONE white box
+    # Draw white box
     # ------------------------------------------
 
     pdf.setFillColor(white)
@@ -223,7 +283,7 @@ def draw_caption_box(
     )
 
     # ------------------------------------------
-    # Draw caption
+    # Caption font
     # ------------------------------------------
 
     pdf.setFillColor(black)
@@ -233,18 +293,133 @@ def draw_caption_box(
         FONT_SIZE,
     )
 
-    # Start from top of box
-    text_y = box_y + box_height - BOX_PADDING - FONT_SIZE
+    # ------------------------------------------
+    # Calculate vertical text position
+    # ------------------------------------------
+
+    line_height = FONT_SIZE + 4
+
+    total_text_height = len(lines) * line_height
+
+    text_y = box_y + (box_height + total_text_height) / 2 - line_height + 2
+
+    # ------------------------------------------
+    # Draw each line
+    # ------------------------------------------
+
+    center_x = qr_x + BOX_WIDTH / 2
 
     for line in lines:
 
         pdf.drawCentredString(
-            qr_x + BOX_WIDTH / 2,
+            center_x,
             text_y,
             line,
         )
 
         text_y -= line_height
+
+
+# ==========================================================
+# DRAW QR + CAPTION GROUP
+# ==========================================================
+
+
+def draw_qr_group(
+    pdf,
+    title,
+    caption,
+    column_x,
+    column_width,
+):
+    """
+    Draw complete QR + caption group.
+
+    The entire group is centered:
+
+        Horizontally
+        Vertically
+
+    inside its column.
+    """
+
+    # ------------------------------------------
+    # Caption lines
+    # ------------------------------------------
+
+    lines = get_caption_lines(caption)
+
+    # ------------------------------------------
+    # Caption box height
+    # ------------------------------------------
+
+    caption_box_height = get_caption_box_height(lines) if lines else 0
+
+    # ------------------------------------------
+    # Total group height
+    #
+    # QR
+    # +
+    # Gap
+    # +
+    # Caption box
+    # ------------------------------------------
+
+    if lines:
+
+        total_group_height = QR_SIZE + CAPTION_GAP + caption_box_height
+
+    else:
+
+        total_group_height = QR_SIZE
+
+    # ------------------------------------------
+    # Center entire group vertically
+    # ------------------------------------------
+
+    group_y = (PAGE_HEIGHT - total_group_height) / 2
+
+    # ------------------------------------------
+    # QR Y
+    # ------------------------------------------
+
+    qr_y = group_y + caption_box_height + CAPTION_GAP
+
+    # ------------------------------------------
+    # Center QR horizontally
+    # ------------------------------------------
+
+    qr_x = column_x + (column_width - QR_SIZE) / 2
+
+    # ------------------------------------------
+    # Generate QR
+    # ------------------------------------------
+
+    qr_image = generate_qr(title)
+
+    # ------------------------------------------
+    # Draw QR
+    # ------------------------------------------
+
+    draw_qr(
+        pdf,
+        qr_image,
+        qr_x,
+        qr_y,
+    )
+
+    # ------------------------------------------
+    # Draw caption
+    # ------------------------------------------
+
+    if lines:
+
+        draw_caption_box(
+            pdf,
+            caption,
+            qr_x,
+            qr_y,
+        )
 
 
 # ==========================================================
@@ -258,15 +433,29 @@ def generate_qr_pdf_from_dataframe(df):
 
     Required columns:
 
-        title
+        id
         caption
+
+    Layout:
+
+        150 mm × 100 mm
+        Landscape
+
+        2 QR codes per page
+
+        Each QR + caption group is
+        horizontally and vertically centered.
 
     Returns:
         BytesIO object containing PDF.
     """
 
+    # ------------------------------------------
+    # Validate columns
+    # ------------------------------------------
+
     required_columns = {
-        "title",
+        "id",
         "caption",
     }
 
@@ -274,7 +463,9 @@ def generate_qr_pdf_from_dataframe(df):
 
     if missing_columns:
 
-        raise ValueError("Missing required CSV columns: " + ", ".join(missing_columns))
+        raise ValueError(
+            "Missing required CSV columns: " + ", ".join(sorted(missing_columns))
+        )
 
     # ------------------------------------------
     # Create PDF in memory
@@ -321,53 +512,31 @@ def generate_qr_pdf_from_dataframe(df):
         column_width = PAGE_WIDTH / 2
 
         # --------------------------------------
-        # QR Y position
-        # --------------------------------------
-
-        qr_y = PAGE_HEIGHT - TOP_MARGIN - QR_SIZE
-
-        # --------------------------------------
-        # Draw each QR
+        # Draw each QR group
         # --------------------------------------
 
         for index, (_, row) in enumerate(rows.iterrows()):
 
-            title = str(row["title"]).strip()
+            id = str(row["id"]).strip()
 
             caption = str(row["caption"]).strip()
 
-            # ------------------------------
-            # Generate QR
-            # ------------------------------
+            # ----------------------------------
+            # Column position
+            # ----------------------------------
 
-            qr_image = generate_qr(title)
+            column_x = index * column_width
 
-            # ------------------------------
-            # Center QR inside column
-            # ------------------------------
+            # ----------------------------------
+            # Draw centered QR group
+            # ----------------------------------
 
-            qr_x = index * column_width + (column_width - QR_SIZE) / 2
-
-            # ------------------------------
-            # Draw QR
-            # ------------------------------
-
-            draw_qr(
+            draw_qr_group(
                 pdf,
-                qr_image,
-                qr_x,
-                qr_y,
-            )
-
-            # ------------------------------
-            # Draw Caption
-            # ------------------------------
-
-            draw_caption_box(
-                pdf,
+                id,
                 caption,
-                qr_x,
-                qr_y,
+                column_x,
+                column_width,
             )
 
         # --------------------------------------
