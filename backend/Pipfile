@@ -4,7 +4,6 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-django-cors-headers = "*"
 asgiref = "==3.12.1"
 attrs = "==26.1.0"
 certifi = "==2026.7.22"
@@ -38,6 +37,12 @@ typing-extensions = "==4.16.0"
 tzdata = "==2026.3"
 uritemplate = "==4.2.0"
 urllib3 = "==2.7.0"
+pandas = "*"
+qrcode = "*"
+reportlab = "*"
+pillow = "*"
+django-cors-headers = "==4.9.0"
+gunicorn = "*"
 
 [dev-packages]
 
