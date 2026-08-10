@@ -70,3 +70,13 @@ class NodeViewSet(viewsets.ModelViewSet):
             return Response(serializer_req.errors, status=400)
         status_code, resp_serializer = process_submit(request.user, pk)
         return Response(resp_serializer.data, status=status_code)
+
+    @action(detail=False, methods=['get'], url_path='visited')
+    def visited(self, request):
+        """Return the list of nodes visited by the user's team."""
+        team = request.user.team
+        if not team:
+            return Response({'detail': 'User is not part of any team.'}, status=400)
+        visited_nodes = Node.objects.filter(teamnode__team=team).distinct()
+        serializer = self.get_serializer(visited_nodes, many=True)
+        return Response(serializer.data)
