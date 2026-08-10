@@ -34,7 +34,8 @@ DEBUG = env('DEBUG')
 
 ALLOWED_HOSTS = ['*']
 
-
+CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True  # Allow cookies/auth headers
 # Application definition
 
 INSTALLED_APPS = [
@@ -46,6 +47,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     
     # Third party apps
+    'corsheaders',
     'rest_framework',
     'djoser',
     'rest_framework_simplejwt',
@@ -57,6 +59,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -193,3 +196,4 @@ SPECTACULAR_SETTINGS = {
 
 CREATE_TEAMS=env('CREATE_TEAM', default=True)
 TEAM_COUNT=env('TEAM_COUNT', default=3)
+MAX_TEAM_HEALTH=env('MAX_TEAM_HEALTH', default=5)

@@ -1,5 +1,6 @@
 from typing import Tuple
 from rest_framework import serializers
+from django.conf import settings
 from .models import Node, Effects, TeamNode
 from .serializers import NodeSerializer, TeamSerializer, SubmitResponseSerializer
 
@@ -30,7 +31,7 @@ def process_submit(user, node_id) -> Tuple[int, serializers.Serializer]:
 
     # Wrong answer
     if current_node.next_node_id != node.id:
-        team.life -= 1
+        team.life = max(1, team.life - 1)
         team.current_node = team.last_checkpoint
         team.save()
         resp = SubmitResponseSerializer({"detail": "Wrong answer"})
@@ -41,7 +42,10 @@ def process_submit(user, node_id) -> Tuple[int, serializers.Serializer]:
     if node.effects == Effects.JUNCTION:
         team.last_checkpoint = node
     if not TeamNode.objects.filter(team=team, node=node).exists():
+        max_health = getattr(settings, "MAX_TEAM_HEALTH", 5)
         team.score += node.score
+        if team.life < max_health:
+            team.life += 1
     team.save()
     _record_node_visit(team, node)
     # Win condition – when the next node points back to the head
