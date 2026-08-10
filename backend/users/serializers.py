@@ -6,13 +6,16 @@ from .models import User, Team, Node
 
 class NodeSerializer(serializers.ModelSerializer):
     clue = serializers.SerializerMethodField()
-    
+    clue_length = serializers.SerializerMethodField()
     class Meta:
         model = Node
-        fields = ['id', 'data', 'clue', 'effects', 'score', 'bonus', 'created_at']
+        fields = ['id', 'data', 'clue', 'clue_length', 'effects', 'score', 'bonus', 'created_at']
 
     def get_clue(self, obj) -> str:
         return ("_ " * len(obj.answer))[:-1]
+
+    def get_clue_length(self, obj) -> str:
+        return str(len(obj.answer))
 
 class TeamMemberSerializer(serializers.ModelSerializer):
     class Meta:
