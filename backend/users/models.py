@@ -74,9 +74,11 @@ class Team(models.Model):
 class Node(models.Model):
     data = models.TextField()
     answer = models.TextField(default="", blank=True)
+    alt_answer = models.TextField(default="", blank=True)
     next_node = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True)
+    alt_next_node = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='alternative_next_node')
     effects = models.CharField(default=Effects.UNLOCKED, max_length=20, choices=Effects.choices)
-    score = models.IntegerField(default=10)
+    score = models.IntegerField(default=10) # Junction nodes no score, handle manually when adding questions
     bonus = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     

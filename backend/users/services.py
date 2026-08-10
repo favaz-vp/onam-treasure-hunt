@@ -17,9 +17,16 @@ def process_submit(user, node_id) -> Tuple[int, serializers.Serializer]:
         resp = SubmitResponseSerializer({"detail": "User is not part of any team."})
         return 400, resp
 
+    if team.life <= 0:
+        resp = SubmitResponseSerializer({"detail": "Game Over! Your team has no lives left."})
+        return 400, resp
+
     current_node = team.current_node
     # First node assignment
     if not current_node:
+        if node.effects == Effects.JUNCTION:
+            resp = SubmitResponseSerializer({"detail": "You cannot start with a junction node."})
+            return 400, resp
         team.current_node = node
         team.head = node
         team.last_checkpoint = node
@@ -28,9 +35,17 @@ def process_submit(user, node_id) -> Tuple[int, serializers.Serializer]:
         data_serializer = NodeSerializer(node)
         resp = SubmitResponseSerializer({"detail": "Success", "data": data_serializer.data})
         return 200, resp
+    else:
+        if current_node == node:
+            resp = SubmitResponseSerializer(
+                {
+                    "detail": "You’ve already submitted this answer. Please choose another one."
+                }
+            )
+            return 400, resp
 
     # Wrong answer
-    if current_node.next_node_id != node.id:
+    if not node.id in [current_node.next_node_id, current_node.alt_next_node_id]:
         team.life = max(1, team.life - 1)
         team.current_node = team.last_checkpoint
         team.save()
