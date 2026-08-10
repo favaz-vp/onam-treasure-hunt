@@ -34,4 +34,5 @@ urllib3==2.7.0
 pandas
 qrcode
 reportlab
-pillowdjango-cors-headers==4.9.0
+pillow
+django-cors-headers==4.9.0
