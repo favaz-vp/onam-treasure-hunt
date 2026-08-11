@@ -76,8 +76,23 @@ class NodeViewSet(viewsets.ModelViewSet):
         if not team:
             return Response({'detail': 'User is not part of any team.'}, status=400)
         visited_nodes = Node.objects.filter(teamnode__team=team).distinct()
-        serializer = self.get_serializer(visited_nodes, many=True)
+
+        team_nodes = TeamNode.objects.filter(team=team)
+        team_node_map = {tn.node_id: tn.created_at for tn in team_nodes}
+        current_node_created_at = team_node_map.get(team.current_node_id) if team.current_node_id else None
+
+        serializer = self.get_serializer(
+            visited_nodes,
+            many=True,
+            context={
+                'request': request,
+                'team': team,
+                'team_node_map': team_node_map,
+                'current_node_created_at': current_node_created_at,
+            }
+        )
         return Response(serializer.data)
+
 
     @extend_schema(
         summary="Get Target Teams",

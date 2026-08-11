@@ -8,6 +8,13 @@ class Effects(models.TextChoices):
     UNLOCKED = 'UNLOCKED', 'Unlocked'
 
 
+class NodeStatus(models.TextChoices):
+    COMPLETED = 'completed', 'Completed'
+    IN_PROGRESS = 'in progress', 'In Progress'
+    LOCKED = 'locked', 'Locked'
+
+
+
 class UserManager(BaseUserManager):
     def create_user(self, email, password=None, **extra_fields):
         if not email:
