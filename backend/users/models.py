@@ -10,7 +10,7 @@ class Effects(models.TextChoices):
 
 class NodeStatus(models.TextChoices):
     COMPLETED = 'completed', 'Completed'
-    IN_PROGRESS = 'in progress', 'In Progress'
+    IN_PROGRESS = 'in-progress', 'In-Progress'
     LOCKED = 'locked', 'Locked'
 
 
