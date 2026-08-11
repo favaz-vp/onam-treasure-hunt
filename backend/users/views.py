@@ -142,3 +142,18 @@ class NodeViewSet(viewsets.ModelViewSet):
             status=status_code,
         )
 
+    @action(detail=False, methods=['get'], url_path='current')
+    def get_current_node(self, request):
+        """ Get current node details"""
+        user_team = request.user.team
+        if not user_team:
+            return Response({'detail': 'User is not part of any team.'}, status=400)
+
+        current_node = user_team.current_node
+        if current_node:
+            serializer = self.get_serializer(current_node)
+            return Response(
+                {"detail": "Details fetched successfully", "data": serializer.data}
+            )
+        else:
+            return Response({"detail": "Game not started yet."}, status=400)
