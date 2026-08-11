@@ -9,10 +9,18 @@ class UserAdmin(admin.ModelAdmin):
     ordering = ('email',)
     filter_horizontal = ()
 
+class UserInline(admin.TabularInline):
+    model = User
+    extra = 0
+    fields = ('email', 'is_captain', 'is_staff')
+    show_change_link = True
+
+
 class TeamAdmin(admin.ModelAdmin):
     list_display = ('name', 'life', 'score', 'attack', 'created_at')
     search_fields = ('name',)
     ordering = ('name',)
+    inlines = (UserInline,)
 
 class NodeAdmin(admin.ModelAdmin):
     list_display = ('data', 'clue', 'effects', 'score', 'bonus', 'life', 'attack', 'created_at')
