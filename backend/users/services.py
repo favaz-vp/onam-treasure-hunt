@@ -79,6 +79,7 @@ def process_submit(user, node_id) -> Tuple[int, serializers.Serializer]:
     if node.effects == Effects.JUNCTION:
         team.last_checkpoint = node
     
+    already_visited = False
     if not TeamNode.objects.filter(team=team, node=node).exists() or team.head == node:
         team.score += node.score
 
@@ -96,6 +97,8 @@ def process_submit(user, node_id) -> Tuple[int, serializers.Serializer]:
             team.life += node.life
             node.life = 0  # Reset life value after it's been used(Only first collected team get the life)
             node.save(update_fields=["life"])
+    else:
+        already_visited = True
 
     team.save()
     _record_node_visit(team, node)
@@ -111,7 +114,10 @@ def process_submit(user, node_id) -> Tuple[int, serializers.Serializer]:
         resp = SubmitResponseSerializer({"detail": "You Win!", "data": team_serializer.data})
         return 200, resp
     data_serializer = NodeSerializer(node)
-    resp = SubmitResponseSerializer({"detail": "Correct answer", "data": data_serializer.data})
+    data = data_serializer.data
+    if already_visited:
+        data["score"] = 0
+    resp = SubmitResponseSerializer({"detail": "Correct answer", "data": data})
     return 200, resp
 
 

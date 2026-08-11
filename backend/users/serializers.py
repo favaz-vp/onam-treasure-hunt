@@ -10,7 +10,20 @@ class NodeSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Node
-        fields = ['id', 'data', 'clue', 'encoded_answer', 'answers', 'effects', 'score', 'bonus', 'created_at', 'status']
+        fields = [
+            "id",
+            "data",
+            "clue",
+            "encoded_answer",
+            "answers",
+            "effects",
+            "score",
+            "bonus",
+            "life",
+            "attack",
+            "created_at",
+            "status",
+        ]
 
     def get_encoded_answer(self, obj) -> str:
         return " ".join("*" * len(word) for word in obj.answer.split())
