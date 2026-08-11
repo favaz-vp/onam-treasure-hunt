@@ -97,3 +97,12 @@ class TeamNode(models.Model):
     
     class Meta:
         unique_together = ('team', 'node')
+
+class GameHistory(models.Model):
+    team = models.ForeignKey('users.Team', on_delete=models.CASCADE)
+    node = models.ForeignKey('users.Node', on_delete=models.CASCADE, null=True, blank=True)
+    action = models.TextField(default="", blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self) -> str:
+        return f"{self.team.name} - {self.action} - Q(self.node.id)"

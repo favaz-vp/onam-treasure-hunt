@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import User, Team, Node, TeamNode
+from .models import User, Team, Node, TeamNode, GameHistory
 
 
 class UserAdmin(admin.ModelAdmin):
@@ -32,7 +32,13 @@ class TeamNodeAdmin(admin.ModelAdmin):
     search_fields = ('team__name', 'node__data')
     ordering = ('created_at',)
 
+class GameHistoryAdmin(admin.ModelAdmin):
+    list_display = ('team', 'node', 'action', 'created_at')
+    search_fields = ('team__name', 'node__data')
+    ordering = ('created_at',)
+ 
 admin.site.register(User, UserAdmin)
 admin.site.register(Team, TeamAdmin)
 admin.site.register(Node, NodeAdmin)
 admin.site.register(TeamNode, TeamNodeAdmin)
+admin.site.register(GameHistory, GameHistoryAdmin)

@@ -1,12 +1,21 @@
 from typing import Tuple
 from rest_framework import serializers
 from django.conf import settings
-from .models import Node, Effects, TeamNode, Team
+from .models import Node, Effects, TeamNode, Team, GameHistory
 from .serializers import NodeSerializer, TeamSerializer, SubmitResponseSerializer
 
 
 def _record_node_visit(team, node):
     TeamNode.objects.get_or_create(team=team, node=node)
+
+
+def record_game_history(team, node, action="Answered correctly"):
+    return GameHistory.objects.create(
+        team=team,
+        node=node,
+        action=action,
+    )
+
 
 def process_submit(user, node_id) -> Tuple[int, serializers.Serializer]:
     """Process a submit request"""
@@ -32,6 +41,11 @@ def process_submit(user, node_id) -> Tuple[int, serializers.Serializer]:
         team.last_checkpoint = node
         team.save()
         _record_node_visit(team, node)
+        record_game_history(
+            team=team,
+            node=node,
+            action="Started game",
+        )
         data_serializer = NodeSerializer(node)
         resp = SubmitResponseSerializer(
             {"detail": "Game started successfully.", "data": data_serializer.data}
@@ -48,9 +62,14 @@ def process_submit(user, node_id) -> Tuple[int, serializers.Serializer]:
 
     # Wrong answer
     if not node.id in [current_node.next_node_id, current_node.alt_next_node_id]:
-        team.life = max(1, team.life - 1)
+        team.life = max(0, team.life - 1)
         team.current_node = team.last_checkpoint
         team.save()
+        record_game_history(
+            team=team,
+            node=current_node,
+            action="Answered incorrectly",
+        )
         resp = SubmitResponseSerializer({"detail": "Wrong answer"})
         return 400, resp
 
@@ -58,31 +77,35 @@ def process_submit(user, node_id) -> Tuple[int, serializers.Serializer]:
     team.current_node = node
     if node.effects == Effects.JUNCTION:
         team.last_checkpoint = node
-    if not TeamNode.objects.filter(team=team, node=node).exists():
-        max_health = getattr(settings, "MAX_TEAM_HEALTH", 5)
+    
+    if not TeamNode.objects.filter(team=team, node=node).exists() or team.head == node:
         team.score += node.score
-        
+
         if node.attack > 0:
             team.attack += node.attack
             node.attack = 0  # Reset attack value after it's been used(Only first collected team get the attack value)
             node.save(update_fields=["attack"])
-        
+
         if node.bonus > 0:
             team.score += node.bonus
             node.bonus = 0  # Reset bonus value after it's been used(Only first collected team get the bonus)
             node.save(update_fields=["bonus"])
-        
+
         if node.life > 0:
             team.life += node.life
             node.life = 0  # Reset life value after it's been used(Only first collected team get the life)
             node.save(update_fields=["life"])
-        
-        if team.life < max_health:
-            team.life += 1
+
     team.save()
     _record_node_visit(team, node)
+    record_game_history(
+        team=team,
+        node=node,
+        action="Answered correctly",
+    )
+
     # Win condition – when the next node points back to the head
-    if node.next_node == team.head:
+    if current_node.next_node == node and node == team.head:
         team_serializer = TeamSerializer(team)
         resp = SubmitResponseSerializer({"detail": "You Win!", "data": team_serializer.data})
         return 200, resp
@@ -113,6 +136,12 @@ def target_attack(attacking_team, target_team_id, attack_value) -> Tuple[int, se
     # Deduct the attack points from the attacking team
     attacking_team.attack -= attack_value
     attacking_team.save()
+    
+    record_game_history(
+        team=attacking_team,
+        node=attacking_team.current_node,
+        action=f"Attacked {target_team.name} for {attack_value} life points",
+    )
 
     resp = SubmitResponseSerializer({"detail": f"Successfully attacked {target_team.name} for {attack_value} life points.", "data": {"target_team": target_team.name, "remaining_life": target_team.life}})
     return 200, resp
