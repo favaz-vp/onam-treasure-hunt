@@ -70,3 +70,7 @@ class TargetTeamsResponseSerializer(serializers.Serializer):
 class TargetAttackSerializer(serializers.Serializer):
     target_team = serializers.IntegerField()
     attack_value = serializers.IntegerField(min_value=1)
+
+
+class StreamTicketSerializer(serializers.Serializer):
+    ticket = serializers.CharField()
