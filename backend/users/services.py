@@ -33,7 +33,9 @@ def process_submit(user, node_id) -> Tuple[int, serializers.Serializer]:
         team.save()
         _record_node_visit(team, node)
         data_serializer = NodeSerializer(node)
-        resp = SubmitResponseSerializer({"detail": "Success", "data": data_serializer.data})
+        resp = SubmitResponseSerializer(
+            {"detail": "Game started successfully.", "data": data_serializer.data}
+        )
         return 200, resp
     else:
         if current_node == node:
@@ -85,7 +87,7 @@ def process_submit(user, node_id) -> Tuple[int, serializers.Serializer]:
         resp = SubmitResponseSerializer({"detail": "You Win!", "data": team_serializer.data})
         return 200, resp
     data_serializer = NodeSerializer(node)
-    resp = SubmitResponseSerializer({"detail": "Success", "data": data_serializer.data})
+    resp = SubmitResponseSerializer({"detail": "Correct answer", "data": data_serializer.data})
     return 200, resp
 
 
