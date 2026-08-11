@@ -1,7 +1,7 @@
 from typing import Tuple
 from rest_framework import serializers
 from django.conf import settings
-from .models import Node, Effects, TeamNode
+from .models import Node, Effects, TeamNode, Team
 from .serializers import NodeSerializer, TeamSerializer, SubmitResponseSerializer
 
 
@@ -59,6 +59,22 @@ def process_submit(user, node_id) -> Tuple[int, serializers.Serializer]:
     if not TeamNode.objects.filter(team=team, node=node).exists():
         max_health = getattr(settings, "MAX_TEAM_HEALTH", 5)
         team.score += node.score
+        
+        if node.attack > 0:
+            team.attack += node.attack
+            node.attack = 0  # Reset attack value after it's been used(Only first collected team get the attack value)
+            node.save(update_fields=["attack"])
+        
+        if node.bonus > 0:
+            team.score += node.bonus
+            node.bonus = 0  # Reset bonus value after it's been used(Only first collected team get the bonus)
+            node.save(update_fields=["bonus"])
+        
+        if node.life > 0:
+            team.life += node.life
+            node.life = 0  # Reset life value after it's been used(Only first collected team get the life)
+            node.save(update_fields=["life"])
+        
         if team.life < max_health:
             team.life += 1
     team.save()
@@ -70,4 +86,31 @@ def process_submit(user, node_id) -> Tuple[int, serializers.Serializer]:
         return 200, resp
     data_serializer = NodeSerializer(node)
     resp = SubmitResponseSerializer({"detail": "Success", "data": data_serializer.data})
+    return 200, resp
+
+
+def target_attack(attacking_team, target_team_id, attack_value) -> Tuple[int, serializers.Serializer]:
+    try:
+        target_team = Team.objects.get(pk=target_team_id)
+    except Team.DoesNotExist:
+        resp = SubmitResponseSerializer({"detail": "Target team does not exist.", "data": {"target_team_id": target_team_id}})
+        return 400, resp
+
+    if attacking_team.id == target_team.id:
+        resp = SubmitResponseSerializer({"detail": "You cannot attack your own team.", "data": {"target_team": target_team.name}})
+        return 400, resp
+
+    if attacking_team.attack < attack_value:
+        resp = SubmitResponseSerializer({"detail": "Not enough attack points to perform this attack.", "data": {"available_attack_points": attacking_team.attack}})
+        return 400, resp
+
+    # Deduct the life from the target team
+    target_team.life = max(0, target_team.life - attack_value)
+    target_team.save()
+
+    # Deduct the attack points from the attacking team
+    attacking_team.attack -= attack_value
+    attacking_team.save()
+
+    resp = SubmitResponseSerializer({"detail": f"Successfully attacked {target_team.name} for {attack_value} life points.", "data": {"target_team": target_team.name, "remaining_life": target_team.life}})
     return 200, resp

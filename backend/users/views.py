@@ -4,10 +4,16 @@ from rest_framework import viewsets
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from drf_spectacular.utils import extend_schema
-from .services import process_submit
-from .models import Node, Effects
-from .serializers import NodeSerializer, SubmitRequestSerializer, SubmitResponseSerializer
-
+from .services import process_submit, target_attack
+from .models import Node, Effects, Team
+from .serializers import (
+    NodeSerializer,
+    SubmitRequestSerializer,
+    SubmitResponseSerializer,
+    TargetAttackSerializer,
+    TargetTeamsResponseSerializer,
+    BasicTeamSerializer,
+)
 
 class NodeViewSet(viewsets.ModelViewSet):
     queryset = Node.objects.all()
@@ -80,3 +86,59 @@ class NodeViewSet(viewsets.ModelViewSet):
         visited_nodes = Node.objects.filter(teamnode__team=team).distinct()
         serializer = self.get_serializer(visited_nodes, many=True)
         return Response(serializer.data)
+
+    @extend_schema(
+        summary="Get Target Teams",
+        description=(
+            "Return a list of teams that can be attacked by the user's team. "
+            "The list excludes the user's own team and any teams with no lives left."
+        ),
+        responses={
+            200: TargetTeamsResponseSerializer,
+            400: SubmitResponseSerializer,
+        },
+    )
+    @action(detail=False, methods=["get"], url_path="target-teams")
+    def get_target_teams(self, request):
+        """Return a list of teams that can be attacked by the user's team."""
+        user_team = request.user.team
+        if not user_team:
+            return Response({'detail': 'User is not part of any team.'}, status=400)
+
+        target_teams = Team.objects.exclude(id=user_team.id).filter(life__gt=0)
+        serializer = BasicTeamSerializer(target_teams, many=True)
+        return Response(
+            {"detail": "Details fetched successfully", "data": serializer.data}
+        )
+
+    @extend_schema(
+        summary="Target Attack",
+        description=(
+            "Attack another team by deducting their life based on the attack value. "
+            "The attacking team must have enough attack points to perform the attack."
+        ),
+        request=TargetAttackSerializer,
+        responses={
+            200: SubmitResponseSerializer,
+            400: SubmitResponseSerializer,
+        },
+    )
+    @action(detail=False, methods=['post'], url_path='target-attack')
+    def target_attack(self, request):
+        """ Attack another team by deducting their life based on the attack value. 
+        The attacking team must have enough attack points to perform the attack. """
+
+        serializer = TargetAttackSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        status_code, serializer = target_attack(
+            attacking_team=request.user.team,
+            target_team_id=serializer.validated_data["target_team"],
+            attack_value=serializer.validated_data["attack_value"],
+        )
+
+        return Response(
+            serializer.data,
+            status=status_code,
+        )
+

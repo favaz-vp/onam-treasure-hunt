@@ -66,6 +66,7 @@ class Team(models.Model):
     current_node = models.ForeignKey('users.Node', on_delete=models.SET_NULL, null=True, blank=True, related_name='current_node')
     last_checkpoint = models.ForeignKey('users.Node', on_delete=models.SET_NULL, null=True, blank=True, related_name='last_checkpoint')
     created_at = models.DateTimeField(auto_now_add=True)
+    attack = models.IntegerField(default=0)
 
     def __str__(self):
         return self.name
@@ -81,6 +82,9 @@ class Node(models.Model):
     score = models.IntegerField(default=10) # Junction nodes no score, handle manually when adding questions
     bonus = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
+    attack = models.IntegerField(default=0)
+    life = models.IntegerField(default=0)
+    clue = models.TextField(default="", blank=True, null=True)
     
     def __str__(self):
         return self.data
