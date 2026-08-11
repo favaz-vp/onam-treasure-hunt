@@ -3,6 +3,7 @@ from rest_framework import serializers
 from django.conf import settings
 from .models import Node, Effects, TeamNode, Team, GameHistory
 from .serializers import NodeSerializer, TeamSerializer, SubmitResponseSerializer
+from .sse import publish
 
 
 def _record_node_visit(team, node):
@@ -142,6 +143,21 @@ def target_attack(attacking_team, target_team_id, attack_value) -> Tuple[int, se
         node=attacking_team.current_node,
         action=f"Attacked {target_team.name} for {attack_value} life points",
     )
+
+    publish(target_team.id, "team_attacked", {
+        "life": target_team.life,
+        "score": target_team.score,
+        "attack": target_team.attack,
+        "attacked_by": attacking_team.name,
+        "damage": attack_value,
+        "detail": f"{attacking_team.name} attacked you for {attack_value} life points.",
+    })
+    publish(attacking_team.id, "team_update", {
+        "life": attacking_team.life,
+        "score": attacking_team.score,
+        "attack": attacking_team.attack,
+        "detail": f"You attacked {target_team.name} for {attack_value} life points.",
+    })
 
     resp = SubmitResponseSerializer({"detail": f"Successfully attacked {target_team.name} for {attack_value} life points.", "data": {"target_team": target_team.name, "remaining_life": target_team.life}})
     return 200, resp
