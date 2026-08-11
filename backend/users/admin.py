@@ -10,12 +10,12 @@ class UserAdmin(admin.ModelAdmin):
     filter_horizontal = ()
 
 class TeamAdmin(admin.ModelAdmin):
-    list_display = ('name', 'life', 'score', 'created_at')
+    list_display = ('name', 'life', 'score', 'attack', 'created_at')
     search_fields = ('name',)
     ordering = ('name',)
 
 class NodeAdmin(admin.ModelAdmin):
-    list_display = ('data', 'effects', 'score', 'bonus', 'created_at')
+    list_display = ('data', 'clue', 'effects', 'score', 'bonus', 'life', 'attack', 'created_at')
     search_fields = ('data',)
     ordering = ('created_at',)
 
