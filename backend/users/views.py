@@ -40,14 +40,6 @@ class NodeViewSet(viewsets.ModelViewSet):
                     status=400,
                 )
 
-        if node.effects == Effects.LOCKED:
-            return Response(
-                {
-                    "detail": "This node is locked. You need a key to unlock and view the question."
-                },
-                status=400,
-            )
-
         serializer = self.get_serializer(node)
         # Record node visit for this team
         TeamNode.objects.get_or_create(team=team, node=node)

@@ -5,8 +5,6 @@ from django.contrib.auth.models import AbstractUser, BaseUserManager
 
 class Effects(models.TextChoices):
     JUNCTION = 'JUNCTION', 'Junction'
-    KEY = 'KEY', 'Key'
-    LOCKED = 'LOCKED', 'Locked'
     UNLOCKED = 'UNLOCKED', 'Unlocked'
 
 
