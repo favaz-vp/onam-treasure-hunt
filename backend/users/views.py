@@ -3,7 +3,7 @@ from .serializers import NodeSerializer
 from rest_framework import viewsets
 from rest_framework.response import Response
 from rest_framework.decorators import action
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import extend_schema, OpenApiParameter
 from .services import process_submit, target_attack
 from .models import Node, Effects, Team
 from .serializers import (
@@ -69,20 +69,65 @@ class NodeViewSet(viewsets.ModelViewSet):
         status_code, resp_serializer = process_submit(request.user, pk)
         return Response(resp_serializer.data, status=status_code)
 
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name='path',
+                type=int,
+                location=OpenApiParameter.QUERY,
+                description='ID of a node to start traversal from',
+                required=False,
+            ),
+        ],
+        responses={200: NodeSerializer(many=True)},
+    )
     @action(detail=False, methods=['get'], url_path='visited')
     def visited(self, request):
-        """Return the list of nodes visited by the user's team."""
+        """Return visited nodes, optionally starting from a given path node, up to the next junction.
+        Query Params:
+            path (optional): ID of a node to start traversal from.
+        """
+        from .models import Effects
         team = request.user.team
         if not team:
             return Response({'detail': 'User is not part of any team.'}, status=400)
-        visited_nodes = Node.objects.filter(teamnode__team=team).distinct()
 
-        team_nodes = TeamNode.objects.filter(team=team)
-        team_node_map = {tn.node_id: tn.created_at for tn in team_nodes}
+        # Gather visited nodes ordered by visit time
+        team_nodes_qs = TeamNode.objects.filter(team=team).order_by('created_at')
+        ordered_nodes = [tn.node for tn in team_nodes_qs]
+
+        # Determine start index based on optional path param
+        path_id = request.query_params.get('path')
+        start_idx = 0
+        if path_id:
+            try:
+                path_id_int = int(path_id)
+            except ValueError:
+                return Response({'detail': 'Invalid path parameter.'}, status=400)
+            # Find node in ordered list
+            matching_idxs = [i for i, node in enumerate(ordered_nodes) if node.id == path_id_int]
+            if not matching_idxs:
+                return Response({'detail': 'Path node not found in visited nodes.'}, status=404)
+            start_idx = matching_idxs[0]
+
+        # Collect nodes from start_idx until (and including) the first junction node
+        selected_nodes = []
+        for node in ordered_nodes[start_idx:]:
+            selected_nodes.append(node)
+            if node.effects == Effects.JUNCTION:
+                # Include the junction node and stop
+                break
+
+        # Fallback: if no junction encountered, use whatever collected
+        if not selected_nodes:
+            return Response([])
+
+        # Build helper maps for serializer context
+        team_node_map = {tn.node_id: tn.created_at for tn in team_nodes_qs}
         current_node_created_at = team_node_map.get(team.current_node_id) if team.current_node_id else None
 
         serializer = self.get_serializer(
-            visited_nodes,
+            selected_nodes,
             many=True,
             context={
                 'request': request,
