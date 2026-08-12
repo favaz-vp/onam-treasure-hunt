@@ -72,7 +72,7 @@ class NodeAdmin(admin.ModelAdmin):
         "bonus",
         "life",
         "attack",
-        "created_at",
+        "answer",
     )
     search_fields = ('data',)
     ordering = ('created_at',)
