@@ -3,7 +3,7 @@ from .serializers import NodeSerializer
 from rest_framework import viewsets
 from rest_framework.response import Response
 from rest_framework.decorators import action
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import extend_schema, OpenApiParameter
 from .services import process_submit, target_attack
 from .models import Node, Effects, Team
 from .serializers import (
@@ -69,20 +69,78 @@ class NodeViewSet(viewsets.ModelViewSet):
         status_code, resp_serializer = process_submit(request.user, pk)
         return Response(resp_serializer.data, status=status_code)
 
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name='path',
+                type=int,
+                location=OpenApiParameter.QUERY,
+                description='ID of a node to start traversal from',
+                required=False,
+            ),
+        ],
+        responses={200: NodeSerializer(many=True)},
+    )
     @action(detail=False, methods=['get'], url_path='visited')
     def visited(self, request):
-        """Return the list of nodes visited by the user's team."""
+        """Return visited nodes starting from head (or passed path node), traversing next_node up to the next junction."""
+        from .models import Effects
         team = request.user.team
         if not team:
             return Response({'detail': 'User is not part of any team.'}, status=400)
-        visited_nodes = Node.objects.filter(teamnode__team=team).distinct()
 
-        team_nodes = TeamNode.objects.filter(team=team)
-        team_node_map = {tn.node_id: tn.created_at for tn in team_nodes}
+        visited_team_nodes = TeamNode.objects.filter(team=team)
+        team_node_map = {tn.node_id: tn.created_at for tn in visited_team_nodes}
+        visited_node_ids = set(team_node_map.keys())
+
+        if not visited_node_ids:
+            return Response([])
+
+        visited_nodes_by_id = {
+            node.id: node
+            for node in Node.objects.filter(id__in=visited_node_ids).select_related('next_node', 'alt_next_node')
+        }
+
+        path_id = request.query_params.get('path')
+        if path_id:
+            try:
+                path_id_int = int(path_id)
+            except ValueError:
+                return Response({'detail': 'Invalid path parameter.'}, status=400)
+
+            if path_id_int not in visited_nodes_by_id:
+                return Response({'detail': 'Path node not found in visited nodes.'}, status=404)
+
+            start_node = visited_nodes_by_id[path_id_int]
+        else:
+            start_node = visited_nodes_by_id.get(team.head_id) if team.head_id else None
+            if not start_node:
+                first_tn = visited_team_nodes.order_by('created_at').first()
+                start_node = visited_nodes_by_id.get(first_tn.node_id) if first_tn else None
+
+        if not start_node:
+            return Response([])
+
+        selected_nodes = []
+        visited_in_loop = set()
+        current = start_node
+
+        while current and current.id not in visited_in_loop:
+            selected_nodes.append(current)
+            visited_in_loop.add(current.id)
+
+            if current.effects == Effects.JUNCTION:
+                break
+
+            if current.next_node_id and current.next_node_id in visited_nodes_by_id:
+                current = visited_nodes_by_id[current.next_node_id]
+            else:
+                break
+
         current_node_created_at = team_node_map.get(team.current_node_id) if team.current_node_id else None
 
         serializer = self.get_serializer(
-            visited_nodes,
+            selected_nodes,
             many=True,
             context={
                 'request': request,
