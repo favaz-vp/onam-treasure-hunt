@@ -83,47 +83,60 @@ class NodeViewSet(viewsets.ModelViewSet):
     )
     @action(detail=False, methods=['get'], url_path='visited')
     def visited(self, request):
-        """Return visited nodes, optionally starting from a given path node, up to the next junction.
-        Query Params:
-            path (optional): ID of a node to start traversal from.
-        """
+        """Return visited nodes starting from head (or passed path node), traversing next_node up to the next junction."""
         from .models import Effects
         team = request.user.team
         if not team:
             return Response({'detail': 'User is not part of any team.'}, status=400)
 
-        # Gather visited nodes ordered by visit time
-        team_nodes_qs = TeamNode.objects.filter(team=team).order_by('created_at')
-        ordered_nodes = [tn.node for tn in team_nodes_qs]
+        visited_team_nodes = TeamNode.objects.filter(team=team)
+        team_node_map = {tn.node_id: tn.created_at for tn in visited_team_nodes}
+        visited_node_ids = set(team_node_map.keys())
 
-        # Determine start index based on optional path param
+        if not visited_node_ids:
+            return Response([])
+
+        visited_nodes_by_id = {
+            node.id: node
+            for node in Node.objects.filter(id__in=visited_node_ids).select_related('next_node', 'alt_next_node')
+        }
+
         path_id = request.query_params.get('path')
-        start_idx = 0
         if path_id:
             try:
                 path_id_int = int(path_id)
             except ValueError:
                 return Response({'detail': 'Invalid path parameter.'}, status=400)
-            # Find node in ordered list
-            matching_idxs = [i for i, node in enumerate(ordered_nodes) if node.id == path_id_int]
-            if not matching_idxs:
+
+            if path_id_int not in visited_nodes_by_id:
                 return Response({'detail': 'Path node not found in visited nodes.'}, status=404)
-            start_idx = matching_idxs[0]
 
-        # Collect nodes from start_idx until (and including) the first junction node
-        selected_nodes = []
-        for node in ordered_nodes[start_idx:]:
-            selected_nodes.append(node)
-            if node.effects == Effects.JUNCTION:
-                # Include the junction node and stop
-                break
+            start_node = visited_nodes_by_id[path_id_int]
+        else:
+            start_node = visited_nodes_by_id.get(team.head_id) if team.head_id else None
+            if not start_node:
+                first_tn = visited_team_nodes.order_by('created_at').first()
+                start_node = visited_nodes_by_id.get(first_tn.node_id) if first_tn else None
 
-        # Fallback: if no junction encountered, use whatever collected
-        if not selected_nodes:
+        if not start_node:
             return Response([])
 
-        # Build helper maps for serializer context
-        team_node_map = {tn.node_id: tn.created_at for tn in team_nodes_qs}
+        selected_nodes = []
+        visited_in_loop = set()
+        current = start_node
+
+        while current and current.id not in visited_in_loop:
+            selected_nodes.append(current)
+            visited_in_loop.add(current.id)
+
+            if current.effects == Effects.JUNCTION:
+                break
+
+            if current.next_node_id and current.next_node_id in visited_nodes_by_id:
+                current = visited_nodes_by_id[current.next_node_id]
+            else:
+                break
+
         current_node_created_at = team_node_map.get(team.current_node_id) if team.current_node_id else None
 
         serializer = self.get_serializer(
