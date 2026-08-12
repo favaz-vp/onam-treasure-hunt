@@ -1,56 +1,46 @@
-"""In-process pub/sub for pushing team state updates to connected SSE clients.
+"""Redis-backed pub/sub for pushing team state updates to connected SSE
+clients, plus a matching Redis-backed store for the short-lived stream
+tickets.
 
-Assumes a single-process deployment (or per-team affinity). If the app ever
-runs behind multiple gunicorn/uvicorn workers or replicas, this in-memory
-registry only reaches listeners connected to the same process — swap for a
-shared broker (e.g. Redis pub/sub) at that point.
+Both used to be plain in-process dicts. That only works under a single
+process: gunicorn with more than one worker (or multiple replicas) means
+the process that issues a ticket or calls publish() is not necessarily the
+process holding a given browser's SSE connection, so an in-memory store
+silently misses cross-process traffic — tickets "expire" immediately and
+published events never reach the listener. Redis gives every worker a
+shared store instead, so tickets and events work regardless of which
+process handles which request.
 """
 import json
-import queue
 import secrets
-import threading
-import time
 
-_lock = threading.Lock()
-_listeners = {}  # team_id -> set[queue.Queue]
+from django.conf import settings
+from redis import Redis
 
-_tickets_lock = threading.Lock()
-_tickets = {}  # ticket -> (team_id, expires_at)
 TICKET_TTL_SECONDS = 30
+HEARTBEAT_SECONDS = 15
+
+_redis = Redis.from_url(settings.REDIS_URL, decode_responses=True)
+
+# GET+DEL as one atomic step, so a ticket can only ever be consumed once
+# even if two requests race to redeem it at the same instant.
+_consume_ticket_script = _redis.register_script(
+    """
+    local value = redis.call('GET', KEYS[1])
+    if value then
+        redis.call('DEL', KEYS[1])
+    end
+    return value
+    """
+)
 
 
-def subscribe(team_id):
-    """Register a new listener queue for a team and return it."""
-    q = queue.Queue(maxsize=100)
-    with _lock:
-        _listeners.setdefault(team_id, set()).add(q)
-    return q
+def _ticket_key(ticket):
+    return f"sse:ticket:{ticket}"
 
 
-def unsubscribe(team_id, q):
-    with _lock:
-        listeners = _listeners.get(team_id)
-        if listeners is not None:
-            listeners.discard(q)
-            if not listeners:
-                _listeners.pop(team_id, None)
-
-
-def publish(team_id, event_type, data):
-    """Push an event to every listener currently subscribed to a team."""
-    with _lock:
-        listeners = list(_listeners.get(team_id, ()))
-    payload = json.dumps(data)
-    for q in listeners:
-        try:
-            q.put_nowait((event_type, payload))
-        except queue.Full:
-            # Slow consumer; drop the event rather than block the publisher.
-            pass
-
-
-def format_sse(event_type, data_json):
-    return f"event: {event_type}\ndata: {data_json}\n\n"
+def _team_channel(team_id):
+    return f"sse:team:{team_id}"
 
 
 def issue_ticket(team_id):
@@ -60,18 +50,42 @@ def issue_ticket(team_id):
     server access logs, browser history, and Referer headers).
     """
     ticket = secrets.token_urlsafe(32)
-    with _tickets_lock:
-        _tickets[ticket] = (team_id, time.time() + TICKET_TTL_SECONDS)
+    _redis.setex(_ticket_key(ticket), TICKET_TTL_SECONDS, team_id)
     return ticket
 
 
 def consume_ticket(ticket):
     """Redeem a ticket for its team_id. Each ticket works exactly once."""
-    with _tickets_lock:
-        entry = _tickets.pop(ticket, None)
-    if entry is None:
-        return None
-    team_id, expires_at = entry
-    if time.time() > expires_at:
-        return None
-    return team_id
+    team_id = _consume_ticket_script(keys=[_ticket_key(ticket)])
+    return int(team_id) if team_id is not None else None
+
+
+def publish(team_id, event_type, data):
+    """Push an event to every listener currently subscribed to a team."""
+    _redis.publish(_team_channel(team_id), json.dumps({"event": event_type, "data": data}))
+
+
+def format_sse(event_type, data_json):
+    return f"event: {event_type}\ndata: {data_json}\n\n"
+
+
+def listen(team_id):
+    """Yield (event_type, data_json) for every event published to a team,
+    blocking between messages. Yields None roughly every
+    HEARTBEAT_SECONDS with no message, so the caller can send a keep-alive.
+    """
+    pubsub = _redis.pubsub()
+    pubsub.subscribe(_team_channel(team_id))
+    try:
+        while True:
+            message = pubsub.get_message(
+                timeout=HEARTBEAT_SECONDS, ignore_subscribe_messages=True
+            )
+            if message is None:
+                yield None
+                continue
+            payload = json.loads(message["data"])
+            yield payload["event"], json.dumps(payload["data"])
+    finally:
+        pubsub.unsubscribe(_team_channel(team_id))
+        pubsub.close()
