@@ -23,7 +23,19 @@ class TeamAdmin(admin.ModelAdmin):
     inlines = (UserInline,)
 
 class NodeAdmin(admin.ModelAdmin):
-    list_display = ('data', 'clue', 'effects', 'score', 'bonus', 'life', 'attack', 'created_at')
+    list_display = (
+        "id",
+        "data",
+        "next_node_id",
+        "alt_next_node_id",
+        "effects",
+        "clue",
+        "score",
+        "bonus",
+        "life",
+        "attack",
+        "created_at",
+    )
     search_fields = ('data',)
     ordering = ('created_at',)
 
@@ -36,7 +48,7 @@ class GameHistoryAdmin(admin.ModelAdmin):
     list_display = ('team', 'node', 'action', 'created_at')
     search_fields = ('team__name', 'node__data')
     ordering = ('created_at',)
- 
+
 admin.site.register(User, UserAdmin)
 admin.site.register(Team, TeamAdmin)
 admin.site.register(Node, NodeAdmin)
