@@ -1,5 +1,6 @@
 from django.contrib import admin
 from .models import User, Team, Node, TeamNode, GameHistory
+from .sse import publish
 
 
 class UserAdmin(admin.ModelAdmin):
@@ -21,6 +22,23 @@ class TeamAdmin(admin.ModelAdmin):
     search_fields = ('name',)
     ordering = ('name',)
     inlines = (UserInline,)
+
+    # Team edits here bypass services.py, so live-connected clients would
+    # otherwise never learn about admin-triggered life/score/attack changes
+    # (e.g. kicking off the game by raising life above 0). Push the same
+    # team_update event the attack flow uses.
+    STREAMED_FIELDS = {'life', 'score', 'attack'}
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+
+        if change and self.STREAMED_FIELDS.intersection(form.changed_data):
+            publish(obj.id, "team_update", {
+                "life": obj.life,
+                "score": obj.score,
+                "attack": obj.attack,
+                "detail": "Team stats updated by game master.",
+            })
 
 class NodeAdmin(admin.ModelAdmin):
     list_display = (
