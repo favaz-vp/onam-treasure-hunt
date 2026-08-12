@@ -93,7 +93,7 @@ class Node(models.Model):
     is_nearest = models.BooleanField(default=False)
     
     def __str__(self):
-        return self.data
+        return f"{self.pk} - ({self.data})"
 
 
 class TeamNode(models.Model):
