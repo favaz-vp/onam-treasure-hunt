@@ -1,15 +1,11 @@
-import queue
-
 from django.http import JsonResponse, StreamingHttpResponse
 from django.views import View
 from drf_spectacular.utils import extend_schema
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .sse import subscribe, unsubscribe, format_sse, issue_ticket, consume_ticket
+from .sse import listen, format_sse, issue_ticket, consume_ticket
 from .serializers import StreamTicketSerializer, SubmitResponseSerializer
-
-HEARTBEAT_SECONDS = 15
 
 
 class TeamStreamTicketView(APIView):
@@ -32,17 +28,13 @@ class TeamStreamTicketView(APIView):
 
 
 def _event_stream(team_id):
-    q = subscribe(team_id)
-    try:
-        yield ": connected\n\n"
-        while True:
-            try:
-                event_type, data_json = q.get(timeout=HEARTBEAT_SECONDS)
-                yield format_sse(event_type, data_json)
-            except queue.Empty:
-                yield ": heartbeat\n\n"
-    finally:
-        unsubscribe(team_id, q)
+    yield ": connected\n\n"
+    for item in listen(team_id):
+        if item is None:
+            yield ": heartbeat\n\n"
+        else:
+            event_type, data_json = item
+            yield format_sse(event_type, data_json)
 
 
 class TeamEventStreamView(View):
@@ -52,7 +44,8 @@ class TeamEventStreamView(View):
     so every connected client sees life/score/attack changes without
     polling. Authenticated via a single-use ticket from
     TeamStreamTicketView (see .sse.issue_ticket) rather than a bearer token
-    in the query string. Single-process only, see users/sse.py.
+    in the query string. Backed by Redis (see users/sse.py), so this works
+    correctly across multiple gunicorn workers/replicas.
 
     Plain Django View (not DRF's APIView) on purpose: APIView.initial()
     always runs content negotiation against Accept before the handler runs,
