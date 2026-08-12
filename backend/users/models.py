@@ -90,6 +90,7 @@ class Node(models.Model):
     attack = models.IntegerField(default=0)
     life = models.IntegerField(default=0)
     clue = models.TextField(default="", blank=True, null=True)
+    is_nearest = models.BooleanField(default=False)
     
     def __str__(self):
         return self.data

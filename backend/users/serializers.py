@@ -34,11 +34,13 @@ class NodeSerializer(serializers.ModelSerializer):
             answers = [
                 {
                     "id": obj.next_node.id,
-                    "answer": obj.answer,           
+                    "answer": obj.answer,
+                    "is_nearest": obj.next_node.is_nearest,
                 },
                 {
                     "id": obj.alt_next_node.id,
-                    "answer": obj.alt_answer,           
+                    "answer": obj.alt_answer,
+                    "is_nearest": obj.alt_next_node.is_nearest,
                 },
             ]
         return answers
