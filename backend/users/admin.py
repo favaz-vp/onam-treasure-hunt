@@ -19,6 +19,7 @@ class UserInline(admin.TabularInline):
 
 class TeamAdmin(admin.ModelAdmin):
     list_display = ('name', 'life', 'score', 'attack', 'created_at')
+    list_editable = ('life', 'score', 'attack')
     search_fields = ('name',)
     ordering = ('name',)
     inlines = (UserInline,)
@@ -29,16 +30,32 @@ class TeamAdmin(admin.ModelAdmin):
     # team_update event the attack flow uses.
     STREAMED_FIELDS = {'life', 'score', 'attack'}
 
+    def _publish_stats(self, obj):
+        publish(obj.id, "team_update", {
+            "life": obj.life,
+            "score": obj.score,
+            "attack": obj.attack,
+            "detail": "Team stats updated by game master.",
+        })
+
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
 
         if change and self.STREAMED_FIELDS.intersection(form.changed_data):
-            publish(obj.id, "team_update", {
-                "life": obj.life,
-                "score": obj.score,
-                "attack": obj.attack,
-                "detail": "Team stats updated by game master.",
-            })
+            self._publish_stats(obj)
+
+    def save_formset(self, request, form, formset, change):
+        # list_editable saves from the changelist go through here instead
+        # of save_model, one form per edited row.
+        super().save_formset(request, form, formset, change)
+
+        if formset.model is not Team:
+            return
+
+        for changed_form in formset.forms:
+            obj = changed_form.instance
+            if obj.pk and self.STREAMED_FIELDS.intersection(changed_form.changed_data):
+                self._publish_stats(obj)
 
 class NodeAdmin(admin.ModelAdmin):
     list_display = (
