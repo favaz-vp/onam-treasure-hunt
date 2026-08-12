@@ -1,0 +1,15 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+  <p>
+    <a href="../">&larr; Back to node list</a>
+  </p>
+  <p>
+    <span style="color:#2b6cb0;">&#8212; solid blue</span> = next_node &nbsp;&nbsp;
+    <span style="color:#c05621;">&#8212; dashed orange</span> = alt_next_node &nbsp;&nbsp;
+    <span style="background:#fefcbf; border:1px solid #d69e2e; padding:0 4px;">yellow</span> = junction node
+  </p>
+  <div style="overflow:auto; border:1px solid #ccc; max-width:100%;">
+    {{ svg|safe }}
+  </div>
+{% endblock %}

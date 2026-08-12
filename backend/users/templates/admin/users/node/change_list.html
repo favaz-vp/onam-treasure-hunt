@@ -1,0 +1,8 @@
+{% extends "admin/change_list.html" %}
+
+{% block object-tools-items %}
+  <li>
+    <a href="graph/" class="button">View graph</a>
+  </li>
+  {{ block.super }}
+{% endblock %}
