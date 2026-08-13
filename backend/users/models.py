@@ -72,6 +72,7 @@ class Team(models.Model):
     last_checkpoint = models.ForeignKey('users.Node', on_delete=models.SET_NULL, null=True, blank=True, related_name='last_checkpoint')
     created_at = models.DateTimeField(auto_now_add=True)
     attack = models.IntegerField(default=0)
+    is_won = models.BooleanField(default=False)
 
     def __str__(self):
         return self.name
