@@ -110,6 +110,8 @@ def process_submit(user, node_id) -> Tuple[int, serializers.Serializer]:
 
     # Win condition – when the next node points back to the head
     if current_node.next_node == node and node == team.head:
+        team.is_won = True
+        team.save(update_fields=["is_won"])
         team_serializer = TeamSerializer(team)
         resp = SubmitResponseSerializer({"detail": "You Win!", "data": team_serializer.data})
         return 200, resp

@@ -21,8 +21,8 @@ class UserInline(admin.TabularInline):
 
 
 class TeamAdmin(admin.ModelAdmin):
-    list_display = ('name', 'life', 'score', 'attack', 'created_at')
-    list_editable = ('life', 'score', 'attack')
+    list_display = ('name', 'life', 'score', 'attack', 'is_won', 'created_at')
+    list_editable = ('life', 'score', 'attack', 'is_won')
     search_fields = ('name',)
     ordering = ('name',)
     inlines = (UserInline,)

@@ -89,7 +89,7 @@ class TeamSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Team
-        fields = ('id', 'name', 'score', 'life', 'attack', 'members')
+        fields = ('id', 'name', 'score', 'life', 'attack', 'is_won', 'members')
 
 class CustomUserSerializer(DjoserUserSerializer):
     team = TeamSerializer(read_only=True)
@@ -109,7 +109,7 @@ class SubmitResponseSerializer(serializers.Serializer):
 class BasicTeamSerializer(serializers.ModelSerializer):
     class Meta:
         model = Team
-        fields = ("id", "name", "score", "life", "attack")
+        fields = ("id", "name", "score", "life", "attack", "is_won")
 
 
 class TargetTeamsResponseSerializer(serializers.Serializer):
