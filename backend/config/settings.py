@@ -208,3 +208,19 @@ SPECTACULAR_SETTINGS = {
 CREATE_TEAMS=env('CREATE_TEAM', default=True)
 TEAM_COUNT=env('TEAM_COUNT', default=3)
 MAX_TEAM_HEALTH=env('MAX_TEAM_HEALTH', default=5)
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+        },
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["console"],
+            "level": "ERROR",
+        },
+    },
+}
