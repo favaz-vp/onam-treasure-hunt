@@ -1,12 +1,13 @@
 from django.contrib import admin
 from django.template.response import TemplateResponse
 from django.urls import path
+from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from .models import User, Team, Node, TeamNode, GameHistory
 from .sse import publish
 from .node_graph import render_node_graph_svg
 
 
-class UserAdmin(admin.ModelAdmin):
+class UserAdmin(BaseUserAdmin):
     list_display = ('email', 'team', 'is_captain', 'is_staff', 'is_superuser')
     list_filter = ('is_staff', 'is_superuser', 'is_captain')
     search_fields = ('email',)
