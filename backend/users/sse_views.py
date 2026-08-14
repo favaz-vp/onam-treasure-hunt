@@ -4,7 +4,7 @@ from drf_spectacular.utils import extend_schema
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .sse import listen, format_sse, issue_ticket, consume_ticket
+from .sse import subscribe, format_sse, issue_ticket, consume_ticket
 from .serializers import StreamTicketSerializer, SubmitResponseSerializer
 
 
@@ -27,14 +27,19 @@ class TeamStreamTicketView(APIView):
         return Response({"ticket": issue_ticket(team.id)})
 
 
-def _event_stream(team_id):
-    yield ": connected\n\n"
-    for item in listen(team_id):
-        if item is None:
-            yield ": heartbeat\n\n"
-        else:
-            event_type, data_json = item
-            yield format_sse(event_type, data_json)
+async def _event_stream(team_id):
+    async with subscribe(team_id) as events:
+        # Subscribed before the client is told it is connected, so nothing
+        # published after the browser's `onopen` can slip through the gap.
+        yield ": connected\n\n"
+        async for item in events:
+            if item is None:
+                # Also how a dropped connection gets noticed: writing this to
+                # a closed socket is what ends an otherwise idle stream.
+                yield ": heartbeat\n\n"
+            else:
+                event_type, data_json = item
+                yield format_sse(event_type, data_json)
 
 
 class TeamEventStreamView(View):
@@ -44,8 +49,13 @@ class TeamEventStreamView(View):
     so every connected client sees life/score/attack changes without
     polling. Authenticated via a single-use ticket from
     TeamStreamTicketView (see .sse.issue_ticket) rather than a bearer token
-    in the query string. Backed by Redis (see users/sse.py), so this works
-    correctly across multiple gunicorn workers/replicas.
+    in the query string.
+
+    Async, and only correct on an ASGI server: an open stream then costs a
+    parked coroutine instead of a whole worker process, which is what let
+    the Redis broker go away (see users/sse.py). Under WSGI Django has to
+    drain an async iterator before it can respond, so this endpoint would
+    hang forever — `manage.py runserver` included. Run uvicorn locally.
 
     Plain Django View (not DRF's APIView) on purpose: APIView.initial()
     always runs content negotiation against Accept before the handler runs,
@@ -54,8 +64,10 @@ class TeamEventStreamView(View):
     DRF's renderers.
     """
 
-    def get(self, request):
+    async def get(self, request):
         ticket = request.GET.get("ticket")
+        # In-memory and lock-guarded, so it is safe to call straight from the
+        # event loop — no database, nothing that can block.
         team_id = consume_ticket(ticket) if ticket else None
         if team_id is None:
             return JsonResponse({"detail": "Invalid or expired ticket."}, status=401)

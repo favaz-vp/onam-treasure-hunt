@@ -37,10 +37,6 @@ ALLOWED_HOSTS = ['*']
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True  # Allow cookies/auth headers
 
-# Shared store for SSE stream tickets and team-update pub/sub (see
-# users/sse.py), so those work correctly across multiple gunicorn workers.
-REDIS_URL = env('REDIS_URL', default='redis://localhost:6379/0')
-
 # Application definition
 
 INSTALLED_APPS = [
