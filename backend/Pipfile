@@ -19,6 +19,7 @@ reportlab = "*"
 pillow = "*"
 
 [dev-packages]
+django-silk = "*"
 
 [requires]
 python_version = "3.12"

@@ -8,6 +8,7 @@ the real thing with ``TestClient(api)``.
 Anything not matched here falls through to Django's own ASGI application,
 which is how /admin/ is still served.
 """
+from django.conf import settings
 from django_bolt import (
     BoltAPI,
     OpenAPIConfig,
@@ -52,6 +53,15 @@ api.include_router(auth_router)
 api.include_router(node_router)
 api.include_router(stream_router)
 api.include_router(qr_router)
+
+# Bolt does not fall through to Django on a route miss — it mounts Django's
+# ASGI application at specific prefixes, and it only does that automatically
+# for the admin. Silk's UI is a Django urlconf like any other, so it needs its
+# own mount or /silk/ is a 404. clear_root_path=True for the same reason the
+# admin mount uses it: config/urls.py already includes the /silk/ prefix in
+# its patterns, so Django must see the full path, not the subpath.
+if settings.SILK_ENABLED:
+    api.mount_django("/silk", clear_root_path=True)
 
 
 @api.get("/api/schema/", guards=[AllowAny()], include_in_schema=False)

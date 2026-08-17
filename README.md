@@ -58,6 +58,35 @@ python manage.py collectstatic --no-input
 before the admin will render with styling. Django's `runserver`-era behaviour of
 finding admin static automatically no longer applies.
 
+### Profiling with Silk
+
+[django-silk](https://github.com/jazzband/django-silk) is behind the `SILK`
+flag in `backend/.env`. With `SILK=1` set, run its migrations once and
+restart:
+
+```sh
+python manage.py migrate
+python manage.py runbolt --dev
+```
+
+The UI is at `/silk/`. Reading it needs a staff login; signed out, it bounces
+you to the admin's login form (`LOGIN_URL` is pointed there for exactly this).
+
+**It does not see the API.** Silk is Django middleware, and Bolt routes
+`/api/` in Rust without entering Django's middleware chain at all, so those
+requests are recorded nowhere and `silk_profile` inside a Bolt handler
+silently does nothing. What Silk profiles is what Django's ASGI application
+serves — in practice the admin. For the API, use Bolt's own logging.
+
+Note also that Bolt does not fall through to Django on a route miss; it mounts
+Django at specific prefixes, and only does that by itself for the admin. The
+`/silk` mount is therefore explicit, in `config/api.py` — without it the URL
+is a 404 no matter what the urlconf says.
+
+Recordings are written to the same SQLite file as the game state, capped at
+1000 requests (`SILKY_MAX_RECORDED_REQUESTS`). Leave the flag off in
+production: it runs cProfile on every request it wraps.
+
 ## Tests
 
 ```sh
