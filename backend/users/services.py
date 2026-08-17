@@ -1,8 +1,14 @@
+"""Game rules: answering a node, and attacking another team.
+
+These stay synchronous. Bolt runs a sync handler on its ORM executor thread,
+which is the same arrangement Django's ASGI handler gave the old DRF views —
+and it is what users/sse.py's threading model is built around, since publish()
+below is therefore always called off the event loop.
+"""
 from typing import Tuple
-from rest_framework import serializers
-from django.conf import settings
+
 from .models import Node, Effects, TeamNode, Team, GameHistory
-from .serializers import NodeSerializer, TeamSerializer, SubmitResponseSerializer
+from .schemas import DetailOut, node_out, team_out
 from .sse import publish
 
 
@@ -18,25 +24,22 @@ def record_game_history(team, node, action="Answered correctly"):
     )
 
 
-def process_submit(user, node_id) -> Tuple[int, serializers.Serializer]:
+def process_submit(user, node_id) -> Tuple[int, DetailOut]:
     """Process a submit request"""
     node = Node.objects.get(pk=node_id)
     team = user.team
     if not team:
         # user without a team
-        resp = SubmitResponseSerializer({"detail": "User is not part of any team."})
-        return 400, resp
+        return 400, DetailOut(detail="User is not part of any team.")
 
     if team.life <= 0:
-        resp = SubmitResponseSerializer({"detail": "Game Over! Your team has no lives left."})
-        return 400, resp
+        return 400, DetailOut(detail="Game Over! Your team has no lives left.")
 
     current_node = team.current_node
     # First node assignment
     if not current_node:
         if node.effects == Effects.JUNCTION:
-            resp = SubmitResponseSerializer({"detail": "You cannot start with a junction node."})
-            return 400, resp
+            return 400, DetailOut(detail="You cannot start with a junction node.")
         team.current_node = node
         team.head = node
         team.last_checkpoint = node
@@ -47,19 +50,15 @@ def process_submit(user, node_id) -> Tuple[int, serializers.Serializer]:
             node=node,
             action="Started game",
         )
-        data_serializer = NodeSerializer(node)
-        resp = SubmitResponseSerializer(
-            {"detail": "Game started successfully.", "data": data_serializer.data}
+        return 200, DetailOut(
+            detail="Game started successfully.",
+            data=node_out(node, team),
         )
-        return 200, resp
     else:
         if current_node == node:
-            resp = SubmitResponseSerializer(
-                {
-                    "detail": "You’ve already submitted this answer. Please choose another one."
-                }
+            return 400, DetailOut(
+                detail="You’ve already submitted this answer. Please choose another one."
             )
-            return 400, resp
 
     # Wrong answer
     if not node.id in [current_node.next_node_id, current_node.alt_next_node_id]:
@@ -71,14 +70,13 @@ def process_submit(user, node_id) -> Tuple[int, serializers.Serializer]:
             node=current_node,
             action="Answered incorrectly",
         )
-        resp = SubmitResponseSerializer({"detail": "Wrong answer"})
-        return 400, resp
+        return 400, DetailOut(detail="Wrong answer")
 
     # Correct answer
     team.current_node = node
     if node.effects == Effects.JUNCTION:
         team.last_checkpoint = node
-    
+
     already_visited = False
     if not TeamNode.objects.filter(team=team, node=node).exists() or team.head == node:
         team.score += node.score
@@ -112,31 +110,34 @@ def process_submit(user, node_id) -> Tuple[int, serializers.Serializer]:
     if current_node.next_node == node and node == team.head:
         team.is_won = True
         team.save(update_fields=["is_won"])
-        team_serializer = TeamSerializer(team)
-        resp = SubmitResponseSerializer({"detail": "You Win!", "data": team_serializer.data})
-        return 200, resp
-    data_serializer = NodeSerializer(node)
-    data = data_serializer.data
+        return 200, DetailOut(detail="You Win!", data=team_out(team))
+
+    data = node_out(node, team)
     if already_visited:
-        data["score"] = 0
-    resp = SubmitResponseSerializer({"detail": "Correct answer", "data": data})
-    return 200, resp
+        data.score = 0
+    return 200, DetailOut(detail="Correct answer", data=data)
 
 
-def target_attack(attacking_team, target_team_id, attack_value) -> Tuple[int, serializers.Serializer]:
+def target_attack(attacking_team, target_team_id, attack_value) -> Tuple[int, DetailOut]:
     try:
         target_team = Team.objects.get(pk=target_team_id)
     except Team.DoesNotExist:
-        resp = SubmitResponseSerializer({"detail": "Target team does not exist.", "data": {"target_team_id": target_team_id}})
-        return 400, resp
+        return 400, DetailOut(
+            detail="Target team does not exist.",
+            data={"target_team_id": target_team_id},
+        )
 
     if attacking_team.id == target_team.id:
-        resp = SubmitResponseSerializer({"detail": "You cannot attack your own team.", "data": {"target_team": target_team.name}})
-        return 400, resp
+        return 400, DetailOut(
+            detail="You cannot attack your own team.",
+            data={"target_team": target_team.name},
+        )
 
     if attacking_team.attack < attack_value:
-        resp = SubmitResponseSerializer({"detail": "Not enough attack points to perform this attack.", "data": {"available_attack_points": attacking_team.attack}})
-        return 400, resp
+        return 400, DetailOut(
+            detail="Not enough attack points to perform this attack.",
+            data={"available_attack_points": attacking_team.attack},
+        )
 
     # Deduct the life from the target team
     target_team.life = max(0, target_team.life - attack_value)
@@ -145,7 +146,7 @@ def target_attack(attacking_team, target_team_id, attack_value) -> Tuple[int, se
     # Deduct the attack points from the attacking team
     attacking_team.attack -= attack_value
     attacking_team.save()
-    
+
     record_game_history(
         team=attacking_team,
         node=attacking_team.current_node,
@@ -167,5 +168,7 @@ def target_attack(attacking_team, target_team_id, attack_value) -> Tuple[int, se
         "detail": f"You attacked {target_team.name} for {attack_value} life points.",
     })
 
-    resp = SubmitResponseSerializer({"detail": f"Successfully attacked {target_team.name} for {attack_value} life points.", "data": {"target_team": target_team.name, "remaining_life": target_team.life}})
-    return 200, resp
+    return 200, DetailOut(
+        detail=f"Successfully attacked {target_team.name} for {attack_value} life points.",
+        data={"target_team": target_team.name, "remaining_life": target_team.life},
+    )
