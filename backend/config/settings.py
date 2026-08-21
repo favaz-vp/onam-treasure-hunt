@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     'djoser',
     'rest_framework_simplejwt',
     'drf_spectacular',
+    'mptt',
 
     # Local apps
     'users',

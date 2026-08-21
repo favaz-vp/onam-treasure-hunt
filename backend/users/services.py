@@ -6,8 +6,14 @@ from .serializers import NodeSerializer, TeamSerializer, SubmitResponseSerialize
 from .sse import publish
 
 
-def _record_node_visit(team, node):
-    TeamNode.objects.get_or_create(team=team, node=node)
+def _record_node_visit(team, node, has_parent=True):
+    if not has_parent:
+        TeamNode.objects.get_or_create(team=team, node=node)
+    else:
+        current_node = team.current_node
+        parent_team_node = TeamNode.objects.filter(team=team, node=current_node).last()
+        TeamNode.objects.get_or_create(team=team, node=node, parent=parent_team_node)
+    
 
 
 def record_game_history(team, node, action="Answered correctly"):
@@ -41,7 +47,7 @@ def process_submit(user, node_id) -> Tuple[int, serializers.Serializer]:
         team.head = node
         team.last_checkpoint = node
         team.save()
-        _record_node_visit(team, node)
+        _record_node_visit(team, node, has_parent=False)
         record_game_history(
             team=team,
             node=node,

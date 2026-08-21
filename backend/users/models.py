@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.db import models
 from django.contrib.auth.models import AbstractUser, BaseUserManager
+from mptt.models import MPTTModel, TreeForeignKey
 
 
 class Effects(models.TextChoices):
@@ -97,13 +98,14 @@ class Node(models.Model):
         return f"{self.pk} - ({self.data})"
 
 
-class TeamNode(models.Model):
+class TeamNode(MPTTModel):
     team = models.ForeignKey('users.Team', on_delete=models.CASCADE)
     node = models.ForeignKey('users.Node', on_delete=models.CASCADE)
+    parent = TreeForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='children')
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:
-        unique_together = ('team', 'node')
+        unique_together = ('team', 'node', 'parent')
 
 class GameHistory(models.Model):
     team = models.ForeignKey('users.Team', on_delete=models.CASCADE)
