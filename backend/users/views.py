@@ -85,6 +85,10 @@ class NodeViewSet(viewsets.ModelViewSet):
     def visited(self, request):
         """Return visited nodes starting from head (or passed path node), traversing next_node up to the next junction."""
         from .models import Effects
+        from .graph_utils import get_descendants, get_ancestors
+        path_id = int(request.query_params.get('path'))
+        descendants = get_ancestors(path_id)
+        return Response({"data" : descendants})
         team = request.user.team
         if not team:
             return Response({'detail': 'User is not part of any team.'}, status=400)
@@ -107,6 +111,8 @@ class NodeViewSet(viewsets.ModelViewSet):
                 path_id_int = int(path_id)
             except ValueError:
                 return Response({'detail': 'Invalid path parameter.'}, status=400)
+
+            descendants_ids = get_descendants(path_id_int)
 
             if path_id_int not in visited_nodes_by_id:
                 return Response({'detail': 'Path node not found in visited nodes.'}, status=404)

@@ -46,3 +46,4 @@ uritemplate==4.2.0; python_version >= '3.9'
 urllib3==2.7.0; python_version >= '3.10'
 uvicorn==0.52.3; python_version >= '3.10'
 uvicorn-worker==0.4.0; python_version >= '3.9'
+networkx>=3.0

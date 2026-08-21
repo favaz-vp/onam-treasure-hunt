@@ -79,6 +79,7 @@ class Team(models.Model):
 
 
 class Node(models.Model):
+    name = models.CharField(max_length=255, default='', blank=True)
     data = models.TextField()
     answer = models.TextField(default="", blank=True)
     alt_answer = models.TextField(default="", blank=True)
@@ -92,6 +93,10 @@ class Node(models.Model):
     life = models.IntegerField(default=0)
     clue = models.TextField(default="", blank=True, null=True)
     is_nearest = models.BooleanField(default=False)
+    # --- Directed-graph edges (M2M) ---
+    children = models.ManyToManyField(
+        'self', symmetrical=False, related_name='parents', blank=True,
+    )
     
     def __str__(self):
         return f"{self.pk} - ({self.data})"
