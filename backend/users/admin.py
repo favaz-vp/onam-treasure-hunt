@@ -78,9 +78,10 @@ class NodeAdmin(admin.ModelAdmin):
     list_display = (
         "id",
         "data",
-        "next_node_id",
-        "alt_next_node_id",
         "effects",
+        "parent",
+        "alt_parent",
+        "alt_child",
         "clue",
         "score",
         "bonus",
