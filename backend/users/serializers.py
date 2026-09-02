@@ -124,3 +124,54 @@ class TargetAttackSerializer(serializers.Serializer):
 
 class StreamTicketSerializer(serializers.Serializer):
     ticket = serializers.CharField()
+
+
+class MapNodeSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    data = serializers.CharField()
+    clue = serializers.CharField(allow_blank=True, allow_null=True, required=False)
+    effects = serializers.CharField()
+    score = serializers.IntegerField()
+    bonus = serializers.IntegerField()
+    attack = serializers.IntegerField()
+    life = serializers.IntegerField()
+    is_nearest = serializers.BooleanField()
+    parent_id = serializers.IntegerField(allow_null=True)
+    alt_parent_id = serializers.IntegerField(allow_null=True)
+    alt_child_id = serializers.IntegerField(allow_null=True)
+    children_ids = serializers.ListField(child=serializers.IntegerField())
+    level = serializers.IntegerField()
+    status = serializers.CharField()
+    is_current = serializers.BooleanField()
+    is_head = serializers.BooleanField()
+    is_checkpoint = serializers.BooleanField()
+    created_at = serializers.DateTimeField()
+
+
+class MapEdgeSerializer(serializers.Serializer):
+    id = serializers.CharField()
+    source = serializers.IntegerField()
+    target = serializers.IntegerField()
+    type = serializers.CharField()
+    is_cycle = serializers.BooleanField()
+
+
+class MapTeamStateSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    score = serializers.IntegerField()
+    life = serializers.IntegerField()
+    attack = serializers.IntegerField()
+    is_won = serializers.BooleanField()
+    current_node_id = serializers.IntegerField(allow_null=True)
+    head_id = serializers.IntegerField(allow_null=True)
+    last_checkpoint_id = serializers.IntegerField(allow_null=True)
+
+
+class MapGraphResponseSerializer(serializers.Serializer):
+    nodes = MapNodeSerializer(many=True)
+    edges = MapEdgeSerializer(many=True)
+    total_nodes = serializers.IntegerField()
+    total_edges = serializers.IntegerField()
+    team_state = MapTeamStateSerializer(allow_null=True)
+

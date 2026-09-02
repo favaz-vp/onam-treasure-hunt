@@ -1,11 +1,11 @@
-from .models import Node, Effects, TeamNode
-from .serializers import NodeSerializer
+from collections import defaultdict
 from rest_framework import viewsets
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from .services import process_submit, target_attack
-from .models import Node, Effects, Team
+from .models import Node, Effects, Team, TeamNode, NodeStatus
 from .serializers import (
     NodeSerializer,
     SubmitRequestSerializer,
@@ -13,6 +13,7 @@ from .serializers import (
     TargetAttackSerializer,
     TargetTeamsResponseSerializer,
     BasicTeamSerializer,
+    MapGraphResponseSerializer,
 )
 
 class NodeViewSet(viewsets.ModelViewSet):
@@ -222,3 +223,148 @@ class NodeViewSet(viewsets.ModelViewSet):
             )
         else:
             return Response({"detail": "Game not started yet."}, status=400)
+
+
+class MapViewSet(viewsets.ViewSet):
+    """
+    API endpoint that returns the complete cyclic graph map of nodes.
+    Django MPTT represents the tree hierarchy, while alt_parent and alt_child connect cycles at junction nodes.
+    """
+    permission_classes = [AllowAny]
+    http_method_names = ['get']
+
+    @extend_schema(
+        summary="Get Cyclic Graph Map",
+        description=(
+            "Returns all nodes and directed edges in the cyclic question graph. "
+            "Edges include primary tree connections (from MPTT parent-child relationships) "
+            "as well as alternative cyclic connections (from alt_child and alt_parent at junction nodes). "
+            "Also includes team progress states (completed, in-progress, locked) if the user is in a team."
+        ),
+        responses={200: MapGraphResponseSerializer},
+    )
+    def list(self, request, *args, **kwargs):
+        nodes = Node.objects.all().order_by('tree_id', 'lft')
+        node_map = {n.id: n for n in nodes}
+
+        # Build children map from MPTT parent relation
+        children_map = defaultdict(list)
+        for n in nodes:
+            if n.parent_id:
+                children_map[n.parent_id].append(n.id)
+
+        # Team context
+        user_team = getattr(request.user, 'team', None) if request.user.is_authenticated else None
+        visited_node_ids = set()
+        if user_team:
+            visited_node_ids = set(
+                TeamNode.objects.filter(team=user_team).values_list('node_id', flat=True)
+            )
+
+        # Build nodes payload
+        nodes_payload = []
+        for n in nodes:
+            if not user_team:
+                status = "unlocked"
+            elif user_team.current_node_id and n.id == user_team.current_node_id:
+                status = NodeStatus.IN_PROGRESS
+            elif n.id in visited_node_ids:
+                status = NodeStatus.COMPLETED
+            else:
+                status = NodeStatus.LOCKED
+
+            nodes_payload.append({
+                "id": n.id,
+                "data": n.data,
+                "clue": n.clue,
+                "effects": n.effects,
+                "score": n.score,
+                "bonus": n.bonus,
+                "attack": n.attack,
+                "life": n.life,
+                "is_nearest": n.is_nearest,
+                "parent_id": n.parent_id,
+                "alt_parent_id": n.alt_parent_id,
+                "alt_child_id": n.alt_child_id,
+                "children_ids": children_map.get(n.id, []),
+                "level": getattr(n, 'level', 0),
+                "status": status,
+                "is_current": bool(user_team and user_team.current_node_id == n.id),
+                "is_head": bool(user_team and user_team.head_id == n.id),
+                "is_checkpoint": bool(user_team and user_team.last_checkpoint_id == n.id),
+                "created_at": n.created_at,
+            })
+
+        # Build edges payload
+        edges_payload = []
+        seen_edges = set()
+
+        # 1. Primary tree edges (parent -> child)
+        for n in nodes:
+            for child_id in children_map.get(n.id, []):
+                if child_id in node_map:
+                    edge_key = (n.id, child_id)
+                    if edge_key not in seen_edges:
+                        seen_edges.add(edge_key)
+                        edges_payload.append({
+                            "id": f"e-{n.id}-{child_id}",
+                            "source": n.id,
+                            "target": child_id,
+                            "type": "primary",
+                            "is_cycle": False,
+                        })
+
+        # 2. Alternative child edges (n -> alt_child)
+        for n in nodes:
+            if n.alt_child_id and n.alt_child_id in node_map:
+                edge_key = (n.id, n.alt_child_id)
+                if edge_key not in seen_edges:
+                    seen_edges.add(edge_key)
+                    edges_payload.append({
+                        "id": f"e-{n.id}-{n.alt_child_id}-alt",
+                        "source": n.id,
+                        "target": n.alt_child_id,
+                        "type": "alternative",
+                        "is_cycle": True,
+                    })
+
+        # 3. Alternative parent edges (alt_parent -> n)
+        for n in nodes:
+            if n.alt_parent_id and n.alt_parent_id in node_map:
+                edge_key = (n.alt_parent_id, n.id)
+                if edge_key not in seen_edges:
+                    seen_edges.add(edge_key)
+                    edges_payload.append({
+                        "id": f"e-{n.alt_parent_id}-{n.id}-alt",
+                        "source": n.alt_parent_id,
+                        "target": n.id,
+                        "type": "alternative",
+                        "is_cycle": True,
+                    })
+
+        # Team state
+        team_state = None
+        if user_team:
+            team_state = {
+                "id": user_team.id,
+                "name": user_team.name,
+                "score": user_team.score,
+                "life": user_team.life,
+                "attack": user_team.attack,
+                "is_won": user_team.is_won,
+                "current_node_id": user_team.current_node_id,
+                "head_id": user_team.head_id,
+                "last_checkpoint_id": user_team.last_checkpoint_id,
+            }
+
+        response_data = {
+            "nodes": nodes_payload,
+            "edges": edges_payload,
+            "total_nodes": len(nodes_payload),
+            "total_edges": len(edges_payload),
+            "team_state": team_state,
+        }
+
+        serializer = MapGraphResponseSerializer(response_data)
+        return Response(serializer.data)
+
