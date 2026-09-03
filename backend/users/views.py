@@ -151,8 +151,28 @@ class NodeViewSet(viewsets.ModelViewSet):
             }
         )
         return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'], url_path='v2/visited')
+    def new_visited(self, request):
+        team = request.user.team
+        if not team:
+            return Response({'detail': 'User is not part of any team.'}, status=400)
 
-
+        start_node = team.head
+        current_node = team.current_node
+        current_team_node = TeamNode.objects.filter(team=team, node=current_node).last()
+        if not start_node:
+            return Response([])
+        
+        ancestor_team_nodes  = (
+            current_team_node
+            .get_ancestors(include_self=True)
+            .select_related("node")
+        )
+        ancestor_nodes = [team_node.node for team_node in ancestor_team_nodes ]
+        response = self.get_serializer(ancestor_nodes, many=True)
+        return Response(response.data)
+ 
     @extend_schema(
         summary="Get Target Teams",
         description=(

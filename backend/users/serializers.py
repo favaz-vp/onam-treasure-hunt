@@ -31,16 +31,18 @@ class NodeSerializer(serializers.ModelSerializer):
     def get_answers(self, obj) -> list:
         answers = []
         if obj.effects == Effects.JUNCTION:
+            direct_child = obj.get_children().first()
+            alt_child = obj.alt_child
             answers = [
                 {
-                    "id": obj.next_node.id,
+                    "id": direct_child.id,
                     "answer": obj.answer,
-                    "is_nearest": obj.next_node.is_nearest,
+                    "is_nearest": direct_child.is_nearest,
                 },
                 {
-                    "id": obj.alt_next_node.id,
+                    "id": getattr(alt_child, 'id', None),
                     "answer": obj.alt_answer,
-                    "is_nearest": obj.alt_next_node.is_nearest,
+                    "is_nearest": getattr(alt_child, 'is_nearest', False),
                 },
             ]
         return answers

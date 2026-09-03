@@ -107,6 +107,7 @@ class TeamNode(MPTTModel):
     
     class Meta:
         unique_together = ('team', 'node', 'parent')
+        ordering = ['created_at']
 
 class GameHistory(models.Model):
     team = models.ForeignKey('users.Team', on_delete=models.CASCADE)
