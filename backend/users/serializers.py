@@ -2,6 +2,22 @@ from rest_framework import serializers
 from djoser.serializers import UserSerializer as DjoserUserSerializer
 from .models import User, Team, Node, Effects, NodeStatus, TeamNode
 
+class NodeCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Node
+        fields = [
+            "data",
+            "clue",
+            "answer",
+            "effects",
+            "score",
+            "bonus",
+            "life",
+            "attack",
+            "parent",
+            "alt_parent",
+            "alt_child"
+        ]
 
 class NodeSerializer(serializers.ModelSerializer):
     encoded_answer = serializers.SerializerMethodField()

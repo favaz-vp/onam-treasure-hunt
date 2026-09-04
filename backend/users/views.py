@@ -14,6 +14,7 @@ from .serializers import (
     TargetTeamsResponseSerializer,
     BasicTeamSerializer,
     MapGraphResponseSerializer,
+    NodeCreateSerializer
 )
 
 class NodeViewSet(viewsets.ModelViewSet):
@@ -50,9 +51,13 @@ class NodeViewSet(viewsets.ModelViewSet):
     def list(self, request, *args, **kwargs):
         return Response({'detail': 'Method "GET" not allowed.'}, status=405)
     
-    @extend_schema(exclude=True)
+    @extend_schema(request=NodeCreateSerializer, responses={201: NodeCreateSerializer})
     def create(self, request, *args, **kwargs):
-        return Response({'detail': 'Method "POST" not allowed.'}, status=405)
+        serializer = NodeCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=400)
+        serializer.save()
+        return Response(serializer.data, status=201)
 
     @action(detail=True, methods=['post'], url_path='submit')
     @extend_schema(
