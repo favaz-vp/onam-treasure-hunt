@@ -20,7 +20,7 @@ from .serializers import (
 class NodeViewSet(viewsets.ModelViewSet):
     queryset = Node.objects.all()
     serializer_class = NodeSerializer
-    http_method_names = ['get', 'post']
+    http_method_names = ['get', 'post', 'delete']
 
     def retrieve(self, request, *args, **kwargs):
 
@@ -248,6 +248,16 @@ class NodeViewSet(viewsets.ModelViewSet):
             )
         else:
             return Response({"detail": "Game not started yet."}, status=400)
+    
+    def delete(self, request, pk):
+        """ Delete a node """
+        try:
+            node = Node.objects.get(pk=pk)
+        except Node.DoesNotExist:
+            return Response({'detail': 'Node not found.'}, status=404)
+        
+        node.delete()
+        return Response({'detail': 'Node deleted successfully.'}, status=200)
 
 
 class MapViewSet(viewsets.ViewSet):

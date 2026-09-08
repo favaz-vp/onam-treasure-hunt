@@ -13,7 +13,7 @@ class UserAdmin(BaseUserAdmin):
     search_fields = ('email',)
     ordering = ('email',)
     fieldsets = (
-    (None, {"fields": ("email", "password")}),
+    (None, {"fields": ("email", "password", "team")}),
     ("Personal info", {"fields": ("first_name", "last_name")}),
     ("Permissions", {
         "fields": (
@@ -81,7 +81,6 @@ class NodeAdmin(admin.ModelAdmin):
         "effects",
         "parent",
         "alt_parent",
-        "alt_child",
         "clue",
         "score",
         "bonus",

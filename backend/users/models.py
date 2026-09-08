@@ -80,9 +80,8 @@ class Team(models.Model):
 
 
 class Node(MPTTModel):
-    parent = TreeForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='child')
+    parent = TreeForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='child')
     alt_parent = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='alternative_child', default=None)
-    alt_child = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='alternative_parent', default=None)
     data = models.TextField()
     answer = models.TextField(default="", blank=True)
     alt_answer = models.TextField(default="", blank=True)
@@ -102,7 +101,7 @@ class Node(MPTTModel):
 class TeamNode(MPTTModel):
     team = models.ForeignKey('users.Team', on_delete=models.CASCADE)
     node = models.ForeignKey('users.Node', on_delete=models.CASCADE)
-    parent = TreeForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='children')
+    parent = TreeForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='children')
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:

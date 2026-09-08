@@ -68,7 +68,7 @@ def process_submit(user, node_id) -> Tuple[int, serializers.Serializer]:
             return 400, resp
 
     # Wrong answer
-    if not node.id in [current_node.next_node_id, current_node.alt_next_node_id]:
+    if current_node.id not in (node.parent_id, node.alt_parent_id):
         team.life = max(0, team.life - 1)
         team.current_node = team.last_checkpoint
         team.save()
@@ -115,7 +115,7 @@ def process_submit(user, node_id) -> Tuple[int, serializers.Serializer]:
     )
 
     # Win condition – when the next node points back to the head
-    if current_node.next_node == node and node == team.head:
+    if node == team.head:
         team.is_won = True
         team.save(update_fields=["is_won"])
         team_serializer = TeamSerializer(team)
