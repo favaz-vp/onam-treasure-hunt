@@ -4,7 +4,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from drf_spectacular.utils import extend_schema, OpenApiParameter
-from .services import process_submit, target_attack
+from .services import process_submit, target_attack, establish_node_relation
 from .models import Node, Effects, Team, TeamNode, NodeStatus
 from .serializers import (
     NodeSerializer,
@@ -14,7 +14,9 @@ from .serializers import (
     TargetTeamsResponseSerializer,
     BasicTeamSerializer,
     MapGraphResponseSerializer,
-    NodeCreateSerializer
+    NodeCreateSerializer,
+    EstablishRelationRequestSerializer,
+    EstablishRelationResponseSerializer,
 )
 
 class NodeViewSet(viewsets.ModelViewSet):
@@ -249,6 +251,41 @@ class NodeViewSet(viewsets.ModelViewSet):
         else:
             return Response({"detail": "Game not started yet."}, status=400)
     
+    @extend_schema(
+        summary="Establish Parent-Child Relation",
+        description=(
+            "Establish a parent-child relationship between two nodes. "
+            "If the parent is a descendant of the child (which would create a cycle disallowed by Django MPTT), "
+            "it is automatically established as alt_parent instead of primary MPTT parent."
+        ),
+        request=EstablishRelationRequestSerializer,
+        responses={
+            200: EstablishRelationResponseSerializer,
+            400: SubmitResponseSerializer,
+        },
+    )
+    @action(detail=False, methods=['post'], url_path='set-relation')
+    def set_relation(self, request):
+        serializer = EstablishRelationRequestSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=400)
+
+        parent = serializer.validated_data['parent']
+        child = serializer.validated_data['child']
+
+        relation_type, updated_child = establish_node_relation(parent=parent, child=child)
+
+
+        return Response(
+            {
+                "detail": f"Successfully established relation as {relation_type}",
+                "relation_type": relation_type,
+                "parent_id": parent.id,
+                "child_id": child.id,
+            },
+            status=200,
+        )
+
     def delete(self, request, pk):
         """ Delete a node """
         try:
@@ -320,7 +357,7 @@ class MapViewSet(viewsets.ViewSet):
                 "is_nearest": n.is_nearest,
                 "parent_id": n.parent_id,
                 "alt_parent_id": n.alt_parent_id,
-                "alt_child_id": n.alt_child_id,
+                "alt_child_id": getattr(n, 'alt_child_id', None),
                 "children_ids": children_map.get(n.id, []),
                 "level": getattr(n, 'level', 0),
                 "status": status,
@@ -351,14 +388,15 @@ class MapViewSet(viewsets.ViewSet):
 
         # 2. Alternative child edges (n -> alt_child)
         for n in nodes:
-            if n.alt_child_id and n.alt_child_id in node_map:
-                edge_key = (n.id, n.alt_child_id)
+            alt_child_id = getattr(n, 'alt_child_id', None)
+            if alt_child_id and alt_child_id in node_map:
+                edge_key = (n.id, alt_child_id)
                 if edge_key not in seen_edges:
                     seen_edges.add(edge_key)
                     edges_payload.append({
-                        "id": f"e-{n.id}-{n.alt_child_id}-alt",
+                        "id": f"e-{n.id}-{alt_child_id}-alt",
                         "source": n.id,
-                        "target": n.alt_child_id,
+                        "target": alt_child_id,
                         "type": "alternative",
                         "is_cycle": True,
                     })

@@ -16,7 +16,6 @@ class NodeCreateSerializer(serializers.ModelSerializer):
             "attack",
             "parent",
             "alt_parent",
-            "alt_child"
         ]
 
 class NodeSerializer(serializers.ModelSerializer):
@@ -193,3 +192,29 @@ class MapGraphResponseSerializer(serializers.Serializer):
     total_edges = serializers.IntegerField()
     team_state = MapTeamStateSerializer(allow_null=True)
 
+
+class EstablishRelationRequestSerializer(serializers.Serializer):
+    parent_id = serializers.IntegerField(required=True)
+    child_id = serializers.IntegerField(required=True)
+
+    def validate(self, attrs):
+        parent_id = attrs.get('parent_id')
+        child_id = attrs.get('child_id')
+
+        try:
+            attrs['parent'] = Node.objects.get(pk=parent_id)
+        except Node.DoesNotExist:
+            raise serializers.ValidationError({'parent_id': f'Parent node with id {parent_id} does not exist.'})
+
+        try:
+            attrs['child'] = Node.objects.get(pk=child_id)
+        except Node.DoesNotExist:
+            raise serializers.ValidationError({'child_id': f'Child node with id {child_id} does not exist.'})
+
+        return attrs
+
+class EstablishRelationResponseSerializer(serializers.Serializer):
+    detail = serializers.CharField()
+    relation_type = serializers.ChoiceField(choices=['parent', 'alt_parent'])
+    parent_id = serializers.IntegerField()
+    child_id = serializers.IntegerField()

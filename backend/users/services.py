@@ -175,3 +175,35 @@ def target_attack(attacking_team, target_team_id, attack_value) -> Tuple[int, se
 
     resp = SubmitResponseSerializer({"detail": f"Successfully attacked {target_team.name} for {attack_value} life points.", "data": {"target_team": target_team.name, "remaining_life": target_team.life}})
     return 200, resp
+
+
+def establish_node_relation(parent: Node, child: Node) -> Tuple[str, Node]:
+    """
+    Establish parent-child relation between two nodes.
+    If setting the passed parent would make a node a child of its descendant (or itself),
+    django-mptt does not allow cycles, so it is set as alt_parent instead.
+    Otherwise, it is set as the primary MPTT parent.
+    """
+    from mptt.exceptions import InvalidMove
+
+    # Check if parent is a descendant of child (including child itself)
+    is_descendant = False
+    if parent.pk and child.pk:
+        if parent.pk == child.pk:
+            is_descendant = True
+        elif parent.is_descendant_of(child, include_self=True):
+            is_descendant = True
+
+    if is_descendant:
+        child.alt_parent = parent
+        child.save(update_fields=['alt_parent'])
+        return 'alt_parent', child
+    else:
+        try:
+            child.parent = parent
+            child.save()
+            return 'parent', child
+        except InvalidMove:
+            child.alt_parent = parent
+            child.save(update_fields=['alt_parent'])
+            return 'alt_parent', child
