@@ -207,3 +207,37 @@ def establish_node_relation(parent: Node, child: Node) -> Tuple[str, Node]:
             child.alt_parent = parent
             child.save(update_fields=['alt_parent'])
             return 'alt_parent', child
+
+
+def remove_node_relation(node1: Node, node2: Node) -> Tuple[bool, list]:
+    """
+    Removes any parent or alt_parent relation between node1 and node2,
+    regardless of which node was the parent or child.
+    """
+    removed = []
+
+    # Check if node1 is parent of node2
+    if node2.parent_id == node1.id:
+        node2.parent = None
+        node2.save()
+        removed.append("parent")
+
+    # Check if node1 is alt_parent of node2
+    if node2.alt_parent_id == node1.id:
+        node2.alt_parent = None
+        node2.save(update_fields=['alt_parent'])
+        removed.append("alt_parent")
+
+    # Check if node2 is parent of node1
+    if node1.parent_id == node2.id:
+        node1.parent = None
+        node1.save()
+        removed.append("parent")
+
+    # Check if node2 is alt_parent of node1
+    if node1.alt_parent_id == node2.id:
+        node1.alt_parent = None
+        node1.save(update_fields=['alt_parent'])
+        removed.append("alt_parent")
+
+    return bool(removed), removed

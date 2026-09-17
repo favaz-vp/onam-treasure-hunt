@@ -93,6 +93,7 @@ class Node(MPTTModel):
     life = models.IntegerField(default=0)
     clue = models.TextField(default="", blank=True, null=True)
     is_nearest = models.BooleanField(default=False)
+    position = models.JSONField(default=dict, blank=True, null=True)
     
     def __str__(self):
         return f"{self.pk} - ({self.data})"

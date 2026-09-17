@@ -6,9 +6,11 @@ class NodeCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Node
         fields = [
+            "id",
             "data",
             "clue",
             "answer",
+            "alt_answer",
             "effects",
             "score",
             "bonus",
@@ -16,7 +18,29 @@ class NodeCreateSerializer(serializers.ModelSerializer):
             "attack",
             "parent",
             "alt_parent",
+            "is_nearest",
+            "position",
         ]
+        read_only_fields = ("id",)
+
+class NodeUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Node
+        fields = [
+            "id",
+            "data",
+            "clue",
+            "answer",
+            "alt_answer",
+            "effects",
+            "score",
+            "bonus",
+            "life",
+            "attack",
+            "is_nearest",
+            "position",
+        ]
+        read_only_fields = ("id",)
 
 class NodeSerializer(serializers.ModelSerializer):
     encoded_answer = serializers.SerializerMethodField()
@@ -36,6 +60,7 @@ class NodeSerializer(serializers.ModelSerializer):
             "bonus",
             "life",
             "attack",
+            "position",
             "created_at",
             "status",
         ]
@@ -47,7 +72,7 @@ class NodeSerializer(serializers.ModelSerializer):
         answers = []
         if obj.effects == Effects.JUNCTION:
             direct_child = obj.get_children().first()
-            alt_child = obj.alt_child
+            alt_child = obj.alternative_child.first()
             answers = [
                 {
                     "id": direct_child.id,
@@ -146,6 +171,8 @@ class StreamTicketSerializer(serializers.Serializer):
 class MapNodeSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     data = serializers.CharField()
+    answer = serializers.CharField()
+    alt_answer = serializers.CharField()
     clue = serializers.CharField(allow_blank=True, allow_null=True, required=False)
     effects = serializers.CharField()
     score = serializers.IntegerField()
@@ -153,6 +180,7 @@ class MapNodeSerializer(serializers.Serializer):
     attack = serializers.IntegerField()
     life = serializers.IntegerField()
     is_nearest = serializers.BooleanField()
+    position = serializers.JSONField(required=False, allow_null=True)
     parent_id = serializers.IntegerField(allow_null=True)
     alt_parent_id = serializers.IntegerField(allow_null=True)
     alt_child_id = serializers.IntegerField(allow_null=True)
@@ -218,3 +246,35 @@ class EstablishRelationResponseSerializer(serializers.Serializer):
     relation_type = serializers.ChoiceField(choices=['parent', 'alt_parent'])
     parent_id = serializers.IntegerField()
     child_id = serializers.IntegerField()
+
+
+class RemoveRelationRequestSerializer(serializers.Serializer):
+    node1_id = serializers.IntegerField(required=False)
+    node2_id = serializers.IntegerField(required=False)
+
+    def validate(self, attrs):
+        node1_id = attrs.get('node1_id') or self.initial_data.get('parent_id') or self.initial_data.get('node1')
+        node2_id = attrs.get('node2_id') or self.initial_data.get('child_id') or self.initial_data.get('node2')
+
+        if not node1_id or not node2_id:
+            raise serializers.ValidationError("Both node1_id and node2_id are required.")
+
+        try:
+            attrs['node1'] = Node.objects.get(pk=node1_id)
+        except Node.DoesNotExist:
+            raise serializers.ValidationError({'node1_id': f'Node with id {node1_id} does not exist.'})
+
+        try:
+            attrs['node2'] = Node.objects.get(pk=node2_id)
+        except Node.DoesNotExist:
+            raise serializers.ValidationError({'node2_id': f'Node with id {node2_id} does not exist.'})
+
+        return attrs
+
+
+class RemoveRelationResponseSerializer(serializers.Serializer):
+    detail = serializers.CharField()
+    removed_relations = serializers.ListField(child=serializers.CharField())
+    node1_id = serializers.IntegerField()
+    node2_id = serializers.IntegerField()
+

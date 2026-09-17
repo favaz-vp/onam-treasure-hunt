@@ -4,7 +4,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from drf_spectacular.utils import extend_schema, OpenApiParameter
-from .services import process_submit, target_attack, establish_node_relation
+from .services import process_submit, target_attack, establish_node_relation, remove_node_relation
 from .models import Node, Effects, Team, TeamNode, NodeStatus
 from .serializers import (
     NodeSerializer,
@@ -15,14 +15,24 @@ from .serializers import (
     BasicTeamSerializer,
     MapGraphResponseSerializer,
     NodeCreateSerializer,
+    NodeUpdateSerializer,
     EstablishRelationRequestSerializer,
     EstablishRelationResponseSerializer,
+    RemoveRelationRequestSerializer,
+    RemoveRelationResponseSerializer,
 )
 
 class NodeViewSet(viewsets.ModelViewSet):
     queryset = Node.objects.all()
     serializer_class = NodeSerializer
-    http_method_names = ['get', 'post', 'delete']
+    http_method_names = ['get', 'post', 'put', 'patch', 'delete']
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return NodeCreateSerializer
+        elif self.action in ['update', 'partial_update']:
+            return NodeUpdateSerializer
+        return NodeSerializer
 
     def retrieve(self, request, *args, **kwargs):
 
@@ -60,6 +70,26 @@ class NodeViewSet(viewsets.ModelViewSet):
             return Response(serializer.errors, status=400)
         serializer.save()
         return Response(serializer.data, status=201)
+
+    @extend_schema(request=NodeUpdateSerializer, responses={200: NodeUpdateSerializer})
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        node_id = kwargs.get('pk')
+        try:
+            node = Node.objects.get(pk=node_id)
+        except Node.DoesNotExist:
+            return Response({'detail': 'Node not found.'}, status=404)
+
+        serializer = NodeUpdateSerializer(node, data=request.data, partial=partial)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=400)
+        serializer.save()
+        return Response(serializer.data, status=200)
+
+    @extend_schema(request=NodeUpdateSerializer, responses={200: NodeUpdateSerializer})
+    def partial_update(self, request, *args, **kwargs):
+        kwargs['partial'] = True
+        return self.update(request, *args, **kwargs)
 
     @action(detail=True, methods=['post'], url_path='submit')
     @extend_schema(
@@ -286,6 +316,44 @@ class NodeViewSet(viewsets.ModelViewSet):
             status=200,
         )
 
+    @extend_schema(
+        summary="Remove Relation Between Nodes",
+        description=(
+            "Remove any parent or alt_parent relation between two nodes, "
+            "regardless of which node is parent and which is child."
+        ),
+        request=RemoveRelationRequestSerializer,
+        responses={
+            200: RemoveRelationResponseSerializer,
+            400: SubmitResponseSerializer,
+        },
+    )
+    @action(detail=False, methods=['post'], url_path='remove-relation')
+    def remove_relation(self, request):
+        serializer = RemoveRelationRequestSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=400)
+
+        node1 = serializer.validated_data['node1']
+        node2 = serializer.validated_data['node2']
+
+        has_removed, removed_types = remove_node_relation(node1=node1, node2=node2)
+
+        if has_removed:
+            detail = f"Successfully removed relation(s) ({', '.join(removed_types)}) between node {node1.id} and node {node2.id}."
+        else:
+            detail = f"No relation existed between node {node1.id} and node {node2.id}."
+
+        return Response(
+            {
+                "detail": detail,
+                "removed_relations": removed_types,
+                "node1_id": node1.id,
+                "node2_id": node2.id,
+            },
+            status=200,
+        )
+
     def delete(self, request, pk):
         """ Delete a node """
         try:
@@ -348,6 +416,8 @@ class MapViewSet(viewsets.ViewSet):
             nodes_payload.append({
                 "id": n.id,
                 "data": n.data,
+                "answer": n.answer,
+                "alt_answer": n.alt_answer,
                 "clue": n.clue,
                 "effects": n.effects,
                 "score": n.score,
@@ -355,6 +425,7 @@ class MapViewSet(viewsets.ViewSet):
                 "attack": n.attack,
                 "life": n.life,
                 "is_nearest": n.is_nearest,
+                "position": n.position,
                 "parent_id": n.parent_id,
                 "alt_parent_id": n.alt_parent_id,
                 "alt_child_id": getattr(n, 'alt_child_id', None),

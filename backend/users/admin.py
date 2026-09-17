@@ -87,6 +87,7 @@ class NodeAdmin(admin.ModelAdmin):
         "life",
         "attack",
         "answer",
+        "position",
     )
     search_fields = ('data',)
     ordering = ('created_at',)
