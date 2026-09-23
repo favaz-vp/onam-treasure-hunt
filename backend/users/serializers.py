@@ -213,6 +213,18 @@ class MapTeamStateSerializer(serializers.Serializer):
     last_checkpoint_id = serializers.IntegerField(allow_null=True)
 
 
+class MapSkeletonNodeSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    position = serializers.JSONField(required=False, allow_null=True)
+    effects = serializers.CharField()
+
+class MapSkeletonResponseSerializer(serializers.Serializer):
+    nodes = MapSkeletonNodeSerializer(many=True)
+    edges = MapEdgeSerializer(many=True)
+    total_nodes = serializers.IntegerField()
+    total_edges = serializers.IntegerField()
+
+
 class MapGraphResponseSerializer(serializers.Serializer):
     nodes = MapNodeSerializer(many=True)
     edges = MapEdgeSerializer(many=True)

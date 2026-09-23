@@ -14,6 +14,7 @@ from .serializers import (
     TargetTeamsResponseSerializer,
     BasicTeamSerializer,
     MapGraphResponseSerializer,
+    MapSkeletonResponseSerializer,
     NodeCreateSerializer,
     NodeUpdateSerializer,
     EstablishRelationRequestSerializer,
@@ -438,53 +439,7 @@ class MapViewSet(viewsets.ViewSet):
                 "created_at": n.created_at,
             })
 
-        # Build edges payload
-        edges_payload = []
-        seen_edges = set()
-
-        # 1. Primary tree edges (parent -> child)
-        for n in nodes:
-            for child_id in children_map.get(n.id, []):
-                if child_id in node_map:
-                    edge_key = (n.id, child_id)
-                    if edge_key not in seen_edges:
-                        seen_edges.add(edge_key)
-                        edges_payload.append({
-                            "id": f"e-{n.id}-{child_id}",
-                            "source": n.id,
-                            "target": child_id,
-                            "type": "primary",
-                            "is_cycle": False,
-                        })
-
-        # 2. Alternative child edges (n -> alt_child)
-        for n in nodes:
-            alt_child_id = getattr(n, 'alt_child_id', None)
-            if alt_child_id and alt_child_id in node_map:
-                edge_key = (n.id, alt_child_id)
-                if edge_key not in seen_edges:
-                    seen_edges.add(edge_key)
-                    edges_payload.append({
-                        "id": f"e-{n.id}-{alt_child_id}-alt",
-                        "source": n.id,
-                        "target": alt_child_id,
-                        "type": "alternative",
-                        "is_cycle": True,
-                    })
-
-        # 3. Alternative parent edges (alt_parent -> n)
-        for n in nodes:
-            if n.alt_parent_id and n.alt_parent_id in node_map:
-                edge_key = (n.alt_parent_id, n.id)
-                if edge_key not in seen_edges:
-                    seen_edges.add(edge_key)
-                    edges_payload.append({
-                        "id": f"e-{n.alt_parent_id}-{n.id}-alt",
-                        "source": n.alt_parent_id,
-                        "target": n.id,
-                        "type": "alternative",
-                        "is_cycle": True,
-                    })
+        edges_payload = self._build_edges(nodes, node_map, children_map)
 
         # Team state
         team_state = None
@@ -511,4 +466,81 @@ class MapViewSet(viewsets.ViewSet):
 
         serializer = MapGraphResponseSerializer(response_data)
         return Response(serializer.data)
+
+    @extend_schema(
+        summary="Get Map Skeleton",
+        description=(
+            "Returns the static layout skeleton of the game map (nodes, levels, coordinates, "
+            "and primary/alternative edges) without dynamic player progress or question answers. "
+            "This endpoint is publicly accessible, static, and can be aggressively cached by clients."
+        ),
+        responses={200: MapSkeletonResponseSerializer},
+    )
+    @action(detail=False, methods=['get'], url_path='skeleton')
+    def skeleton(self, request, *args, **kwargs):
+        nodes = Node.objects.all().order_by('tree_id', 'lft')
+        node_map = {n.id: n for n in nodes}
+
+        # Build children map from MPTT parent relation
+        children_map = defaultdict(list)
+        for n in nodes:
+            if n.parent_id:
+                children_map[n.parent_id].append(n.id)
+
+        # Build skeleton nodes payload
+        nodes_payload = []
+        for n in nodes:
+            nodes_payload.append({
+                "id": n.id,
+                "position": n.position,
+                "effects": n.effects,
+            })
+
+        edges_payload = self._build_edges(nodes, node_map, children_map)
+
+        response_data = {
+            "nodes": nodes_payload,
+            "edges": edges_payload,
+            "total_nodes": len(nodes_payload),
+            "total_edges": len(edges_payload),
+        }
+
+        serializer = MapSkeletonResponseSerializer(response_data)
+        return Response(serializer.data)
+
+    @staticmethod
+    def _build_edges(nodes, node_map, children_map):
+        edges_payload = []
+        seen_edges = set()
+
+        # 1. Primary tree edges (parent -> child)
+        for n in nodes:
+            for child_id in children_map.get(n.id, []):
+                if child_id in node_map:
+                    edge_key = (n.id, child_id)
+                    if edge_key not in seen_edges:
+                        seen_edges.add(edge_key)
+                        edges_payload.append({
+                            "id": f"e-{n.id}-{child_id}",
+                            "source": n.id,
+                            "target": child_id,
+                            "type": "primary",
+                            "is_cycle": False,
+                        })
+
+        # 3. Alternative parent edges (alt_parent -> n)
+        for n in nodes:
+            if n.alt_parent_id and n.alt_parent_id in node_map:
+                edge_key = (n.alt_parent_id, n.id)
+                if edge_key not in seen_edges:
+                    seen_edges.add(edge_key)
+                    edges_payload.append({
+                        "id": f"e-{n.alt_parent_id}-{n.id}-alt",
+                        "source": n.alt_parent_id,
+                        "target": n.id,
+                        "type": "alternative",
+                        "is_cycle": True,
+                    })
+
+        return edges_payload
 
