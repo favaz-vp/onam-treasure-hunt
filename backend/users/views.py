@@ -4,7 +4,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from drf_spectacular.utils import extend_schema, OpenApiParameter
-from .services import process_submit, target_attack, establish_node_relation, remove_node_relation
+from .services import process_submit, target_attack, establish_node_relation, remove_node_relation, clear_map_data
 from .models import Node, Effects, Team, TeamNode, NodeStatus
 from .serializers import (
     NodeSerializer,
@@ -21,6 +21,7 @@ from .serializers import (
     EstablishRelationResponseSerializer,
     RemoveRelationRequestSerializer,
     RemoveRelationResponseSerializer,
+    ClearMapResponseSerializer,
 )
 
 class NodeViewSet(viewsets.ModelViewSet):
@@ -365,6 +366,22 @@ class NodeViewSet(viewsets.ModelViewSet):
         node.delete()
         return Response({'detail': 'Node deleted successfully.'}, status=200)
 
+    @extend_schema(
+        summary="Clear all nodes",
+        description="Deletes all nodes from the database, removes all team node history, and resets team pointers.",
+        responses={200: ClearMapResponseSerializer},
+    )
+    @action(detail=False, methods=['post', 'delete'], url_path='clear', permission_classes=[AllowAny])
+    def clear(self, request, *args, **kwargs):
+        deleted_count = clear_map_data()
+        return Response(
+            {
+                "detail": "Map cleared successfully. All nodes have been deleted.",
+                "deleted_nodes_count": deleted_count,
+            },
+            status=200,
+        )
+
 
 class MapViewSet(viewsets.ViewSet):
     """
@@ -372,7 +389,7 @@ class MapViewSet(viewsets.ViewSet):
     Django MPTT represents the tree hierarchy, while alt_parent and alt_child connect cycles at junction nodes.
     """
     permission_classes = [AllowAny]
-    http_method_names = ['get']
+    http_method_names = ['get', 'post', 'delete']
 
     @extend_schema(
         summary="Get Cyclic Graph Map",
@@ -543,4 +560,20 @@ class MapViewSet(viewsets.ViewSet):
                     })
 
         return edges_payload
+
+    @extend_schema(
+        summary="Clear Map (Delete all nodes)",
+        description="Deletes all nodes from the map/database, removes all team node history, and resets team pointers.",
+        responses={200: ClearMapResponseSerializer},
+    )
+    @action(detail=False, methods=['post', 'delete'], url_path='clear')
+    def clear_map(self, request, *args, **kwargs):
+        deleted_count = clear_map_data()
+        return Response(
+            {
+                "detail": "Map cleared successfully. All nodes have been deleted.",
+                "deleted_nodes_count": deleted_count,
+            },
+            status=200,
+        )
 

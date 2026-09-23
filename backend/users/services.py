@@ -81,7 +81,6 @@ def process_submit(user, node_id) -> Tuple[int, serializers.Serializer]:
         return 400, resp
 
     # Correct answer
-    team.current_node = node
     if node.effects == Effects.JUNCTION:
         team.last_checkpoint = node
     
@@ -106,8 +105,9 @@ def process_submit(user, node_id) -> Tuple[int, serializers.Serializer]:
     else:
         already_visited = True
 
-    team.save()
     _record_node_visit(team, node)
+    team.current_node = node
+    team.save()
     record_game_history(
         team=team,
         node=node,
@@ -241,3 +241,15 @@ def remove_node_relation(node1: Node, node2: Node) -> Tuple[bool, list]:
         removed.append("alt_parent")
 
     return bool(removed), removed
+
+
+def clear_map_data() -> int:
+    """
+    Deletes all nodes from the map, removing all team node history and resetting team pointers.
+    Returns the count of deleted nodes.
+    """
+    Team.objects.all().update(head=None, current_node=None, last_checkpoint=None)
+    TeamNode.objects.all().delete()
+    deleted_count, _ = Node.objects.all().delete()
+    return deleted_count
+

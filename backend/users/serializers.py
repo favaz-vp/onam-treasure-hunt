@@ -290,3 +290,7 @@ class RemoveRelationResponseSerializer(serializers.Serializer):
     node1_id = serializers.IntegerField()
     node2_id = serializers.IntegerField()
 
+
+class ClearMapResponseSerializer(serializers.Serializer):
+    detail = serializers.CharField()
+    deleted_nodes_count = serializers.IntegerField()
