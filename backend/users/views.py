@@ -208,9 +208,8 @@ class NodeViewSet(viewsets.ModelViewSet):
             .get_ancestors(include_self=True)
             .select_related("node")
         )
-        ancestor_nodes = [team_node.node for team_node in ancestor_team_nodes ]
-        response = self.get_serializer(ancestor_nodes, many=True)
-        return Response(response.data)
+        ancestor_nodes_ids = [team_node.node.id for team_node in ancestor_team_nodes ]
+        return Response({'visited_nodes': ancestor_nodes_ids})
  
     @extend_schema(
         summary="Get Target Teams",
