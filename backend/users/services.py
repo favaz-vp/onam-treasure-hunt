@@ -87,22 +87,22 @@ def process_submit(user, node_id) -> Tuple[int, serializers.Serializer]:
     
     already_visited = False
     if not TeamNode.objects.filter(team=team, node=node).exists() or team.head == node:
-        team.score += node.score
+        team.score += current_node.score
 
-        if node.attack > 0:
-            team.attack += node.attack
-            node.attack = 0  # Reset attack value after it's been used(Only first collected team get the attack value)
-            node.save(update_fields=["attack"])
+        if current_node.attack > 0:
+            team.attack += current_node.attack
+            current_node.attack = 0  # Reset attack value after it's been used(Only first collected team get the attack value)
+            current_node.save(update_fields=["attack"])
 
-        if node.bonus > 0:
-            team.score += node.bonus
-            node.bonus = 0  # Reset bonus value after it's been used(Only first collected team get the bonus)
-            node.save(update_fields=["bonus"])
+        if current_node.bonus > 0:
+            team.score += current_node.bonus
+            current_node.bonus = 0  # Reset bonus value after it's been used(Only first collected team get the bonus)
+            current_node.save(update_fields=["bonus"])
 
-        if node.life > 0:
-            team.life += node.life
-            node.life = 0  # Reset life value after it's been used(Only first collected team get the life)
-            node.save(update_fields=["life"])
+        if current_node.life > 0:
+            team.life += current_node.life
+            current_node.life = 0  # Reset life value after it's been used(Only first collected team get the life)
+            current_node.save(update_fields=["life"])
     else:
         already_visited = True
 
