@@ -58,6 +58,7 @@ INSTALLED_APPS = [
     # Local apps
     'users',
     'qr_generator',
+    'game',
 ]
 
 MIDDLEWARE = [

@@ -1,19 +1,15 @@
 from django.conf import settings
 from django.db import models
 from django.contrib.auth.models import AbstractUser, BaseUserManager
-from mptt.models import MPTTModel, TreeForeignKey
 
-
-class Effects(models.TextChoices):
-    JUNCTION = 'JUNCTION', 'Junction'
-    UNLOCKED = 'UNLOCKED', 'Unlocked'
+# Re-export game models for backward-compatibility
+from game.models import Node, Effects, TeamNode, GameHistory
 
 
 class NodeStatus(models.TextChoices):
     COMPLETED = 'completed', 'Completed'
     IN_PROGRESS = 'in-progress', 'In-Progress'
     LOCKED = 'locked', 'Locked'
-
 
 
 class UserManager(BaseUserManager):
@@ -68,52 +64,12 @@ class Team(models.Model):
     name = models.CharField(max_length=100)
     life = models.IntegerField(default=5)
     score = models.IntegerField(default=0)
-    head = models.ForeignKey('users.Node', on_delete=models.SET_NULL, null=True, blank=True)
-    current_node = models.ForeignKey('users.Node', on_delete=models.SET_NULL, null=True, blank=True, related_name='current_node')
-    last_checkpoint = models.ForeignKey('users.Node', on_delete=models.SET_NULL, null=True, blank=True, related_name='last_checkpoint')
+    head = models.ForeignKey('game.Node', on_delete=models.SET_NULL, null=True, blank=True)
+    current_node = models.ForeignKey('game.Node', on_delete=models.SET_NULL, null=True, blank=True, related_name='current_node')
+    last_checkpoint = models.ForeignKey('game.Node', on_delete=models.SET_NULL, null=True, blank=True, related_name='last_checkpoint')
     created_at = models.DateTimeField(auto_now_add=True)
     attack = models.IntegerField(default=0)
     is_won = models.BooleanField(default=False)
 
     def __str__(self):
         return self.name
-
-
-class Node(MPTTModel):
-    parent = TreeForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='child')
-    alt_parent = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='alternative_child', default=None)
-    data = models.TextField()
-    answer = models.TextField(default="", blank=True)
-    alt_answer = models.TextField(default="", blank=True)
-    effects = models.CharField(default=Effects.UNLOCKED, max_length=20, choices=Effects.choices)
-    score = models.IntegerField(default=10) # Junction nodes no score, handle manually when adding questions
-    bonus = models.IntegerField(default=0)
-    created_at = models.DateTimeField(auto_now_add=True)
-    attack = models.IntegerField(default=0)
-    life = models.IntegerField(default=0)
-    clue = models.TextField(default="", blank=True, null=True)
-    is_nearest = models.BooleanField(default=False)
-    position = models.JSONField(default=dict, blank=True, null=True)
-    
-    def __str__(self):
-        return f"{self.pk} - ({self.data})"
-
-
-class TeamNode(MPTTModel):
-    team = models.ForeignKey('users.Team', on_delete=models.CASCADE)
-    node = models.ForeignKey('users.Node', on_delete=models.CASCADE)
-    parent = TreeForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='children')
-    created_at = models.DateTimeField(auto_now_add=True)
-    
-    class Meta:
-        unique_together = ('team', 'node', 'parent')
-        ordering = ['created_at']
-
-class GameHistory(models.Model):
-    team = models.ForeignKey('users.Team', on_delete=models.CASCADE)
-    node = models.ForeignKey('users.Node', on_delete=models.CASCADE, null=True, blank=True)
-    action = models.TextField(default="", blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    
-    def __str__(self) -> str:
-        return f"{self.team.name} - {self.action} - Q(self.node.id)"

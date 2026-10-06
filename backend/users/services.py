@@ -180,33 +180,62 @@ def target_attack(attacking_team, target_team_id, attack_value) -> Tuple[int, se
 def establish_node_relation(parent: Node, child: Node) -> Tuple[str, Node]:
     """
     Establish parent-child relation between two nodes.
-    If setting the passed parent would make a node a child of its descendant (or itself),
-    django-mptt does not allow cycles, so it is set as alt_parent instead.
-    Otherwise, it is set as the primary MPTT parent.
+    - If child already has both parent and alt_parent, disallow setting a new parent.
+    - If child already has a parent, set the new parent as alt_parent.
+    - Only junction nodes can have an alt_parent, or normal nodes if the parent is a junction node.
+    - If setting as primary parent creates a cycle, attempt to set as alt_parent.
     """
     from mptt.exceptions import InvalidMove
 
-    # Check if parent is a descendant of child (including child itself)
+    if parent.pk == child.pk:
+        raise serializers.ValidationError({"detail": "A node cannot be its own parent."})
+
+    if child.parent_id == parent.id:
+        raise serializers.ValidationError({"detail": "This node is already the parent of the child node."})
+
+    if child.alt_parent_id == parent.id:
+        raise serializers.ValidationError({"detail": "This node is already the alt_parent of the child node."})
+
+    # If child already has both parent and alt_parent
+    if child.parent_id is not None and child.alt_parent_id is not None:
+        raise serializers.ValidationError({"detail": "Child node already has both a parent and an alt_parent."})
+
+    def _set_as_alt_parent(p: Node, c: Node) -> Tuple[str, Node]:
+        if c.alt_parent_id is not None:
+            raise serializers.ValidationError({"detail": "Child node already has an alt_parent."})
+
+        is_child_junction = c.effects == Effects.JUNCTION
+        is_parent_junction = p.effects == Effects.JUNCTION
+
+        if not (is_child_junction or is_parent_junction):
+            raise serializers.ValidationError({
+                "detail": "Only junction nodes can have an alt_parent, or normal nodes if connected to a junction node."
+            })
+
+        c.alt_parent = p
+        c.save(update_fields=['alt_parent'])
+        return 'alt_parent', c
+
+    # If child already has a primary parent, set the new parent as alt_parent
+    if child.parent_id is not None:
+        return _set_as_alt_parent(parent, child)
+
+    # Child does not have a primary parent yet
+    # Check if parent is a descendant of child (would create a cycle in MPTT)
     is_descendant = False
     if parent.pk and child.pk:
-        if parent.pk == child.pk:
-            is_descendant = True
-        elif parent.is_descendant_of(child, include_self=True):
+        if parent.is_descendant_of(child, include_self=True):
             is_descendant = True
 
     if is_descendant:
-        child.alt_parent = parent
-        child.save(update_fields=['alt_parent'])
-        return 'alt_parent', child
+        return _set_as_alt_parent(parent, child)
     else:
         try:
             child.parent = parent
             child.save()
             return 'parent', child
         except InvalidMove:
-            child.alt_parent = parent
-            child.save(update_fields=['alt_parent'])
-            return 'alt_parent', child
+            return _set_as_alt_parent(parent, child)
 
 
 def remove_node_relation(node1: Node, node2: Node) -> Tuple[bool, list]:

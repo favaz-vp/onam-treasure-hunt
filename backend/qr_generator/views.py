@@ -10,7 +10,7 @@ from drf_spectacular.utils import extend_schema
 
 from .serializers import QRPDFUploadSerializer
 from .utils import generate_qr_pdf
-from users.models import Node
+from game.models import Node
 import csv
 
 

@@ -1,5 +1,5 @@
 from collections import defaultdict
-from rest_framework import viewsets
+from rest_framework import viewsets, serializers
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.decorators import action
@@ -286,8 +286,8 @@ class NodeViewSet(viewsets.ModelViewSet):
         summary="Establish Parent-Child Relation",
         description=(
             "Establish a parent-child relationship between two nodes. "
-            "If the parent is a descendant of the child (which would create a cycle disallowed by Django MPTT), "
-            "it is automatically established as alt_parent instead of primary MPTT parent."
+            "If the child already has a parent, the new parent is set as alt_parent. "
+            "Only junction nodes can have an alt_parent, or normal nodes if set to a junction node."
         ),
         request=EstablishRelationRequestSerializer,
         responses={
@@ -304,8 +304,17 @@ class NodeViewSet(viewsets.ModelViewSet):
         parent = serializer.validated_data['parent']
         child = serializer.validated_data['child']
 
-        relation_type, updated_child = establish_node_relation(parent=parent, child=child)
-
+        try:
+            relation_type, updated_child = establish_node_relation(parent=parent, child=child)
+        except serializers.ValidationError as e:
+            error_detail = e.detail
+            if isinstance(error_detail, dict) and "detail" in error_detail:
+                return Response(error_detail, status=400)
+            elif isinstance(error_detail, list):
+                return Response({"detail": str(error_detail[0])}, status=400)
+            elif isinstance(error_detail, dict):
+                return Response(error_detail, status=400)
+            return Response({"detail": str(error_detail)}, status=400)
 
         return Response(
             {
@@ -370,7 +379,7 @@ class NodeViewSet(viewsets.ModelViewSet):
         description="Deletes all nodes from the database, removes all team node history, and resets team pointers.",
         responses={200: ClearMapResponseSerializer},
     )
-    @action(detail=False, methods=['post', 'delete'], url_path='clear', permission_classes=[AllowAny])
+    @action(detail=False, methods=['delete'], url_path='clear', permission_classes=[AllowAny])
     def clear(self, request, *args, **kwargs):
         deleted_count = clear_map_data()
         return Response(
@@ -409,6 +418,8 @@ class MapViewSet(viewsets.ViewSet):
         for n in nodes:
             if n.parent_id:
                 children_map[n.parent_id].append(n.id)
+            if n.alt_parent_id:
+                children_map[n.alt_parent_id].append(n.id)
 
         # Team context
         user_team = getattr(request.user, 'team', None) if request.user.is_authenticated else None
@@ -565,7 +576,7 @@ class MapViewSet(viewsets.ViewSet):
         description="Deletes all nodes from the map/database, removes all team node history, and resets team pointers.",
         responses={200: ClearMapResponseSerializer},
     )
-    @action(detail=False, methods=['post', 'delete'], url_path='clear')
+    @action(detail=False, methods=['delete'], url_path='clear')
     def clear_map(self, request, *args, **kwargs):
         deleted_count = clear_map_data()
         return Response(
