@@ -183,6 +183,7 @@ def establish_node_relation(parent: Node, child: Node) -> Tuple[str, Node]:
     Establish parent-child relation between two nodes.
     - If child already has both parent and alt_parent, disallow setting a new parent.
     - If child already has a parent, set the new parent as alt_parent.
+    - If parent is already a direct parent of any node, set the relation through alt_parent.
     - Only junction nodes can have an alt_parent, or normal nodes if the parent is a junction node.
     - If setting as primary parent creates a cycle, attempt to set as alt_parent.
     """
@@ -221,7 +222,10 @@ def establish_node_relation(parent: Node, child: Node) -> Tuple[str, Node]:
     if child.parent_id is not None:
         return _set_as_alt_parent(parent, child)
 
-    # Child does not have a primary parent yet
+    # If parent is already a direct parent of any node, set relation through alt_parent
+    if Node.objects.filter(parent=parent).exists():
+        return _set_as_alt_parent(parent, child)
+
     # Check if parent is a descendant of child (would create a cycle in MPTT)
     is_descendant = False
     if parent.pk and child.pk:

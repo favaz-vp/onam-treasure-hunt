@@ -293,7 +293,8 @@ class NodeViewSet(viewsets.ModelViewSet):
         summary="Establish Parent-Child Relation",
         description=(
             "Establish a parent-child relationship between two nodes. "
-            "If the child already has a parent, the new parent is set as alt_parent. "
+            "If the child already has a parent, or if the parent is already a direct parent of any node, "
+            "the relation is set through alt_parent. "
             "Only junction nodes can have an alt_parent, or normal nodes if set to a junction node."
         ),
         request=EstablishRelationRequestSerializer,
