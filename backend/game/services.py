@@ -1,0 +1,284 @@
+from typing import Tuple
+from rest_framework import serializers
+from django.conf import settings
+from .models import Node, Effects, TeamNode, GameHistory
+from users.models import Team
+from .serializers import NodeSerializer, SubmitResponseSerializer
+from users.serializers import TeamSerializer
+from users.sse import publish
+
+
+def _record_node_visit(team, node, has_parent=True):
+    if not has_parent:
+        TeamNode.objects.get_or_create(team=team, node=node)
+    else:
+        current_node = team.current_node
+        parent_team_node = TeamNode.objects.filter(team=team, node=current_node).last()
+        TeamNode.objects.get_or_create(team=team, node=node, parent=parent_team_node)
+
+
+def record_game_history(team, node, action="Answered correctly"):
+    return GameHistory.objects.create(
+        team=team,
+        node=node,
+        action=action,
+    )
+
+
+def process_submit(user, node_id) -> Tuple[int, serializers.Serializer]:
+    """Process a submit request"""
+    node = Node.objects.get(pk=node_id)
+    team = user.team
+    if not team:
+        # user without a team
+        resp = SubmitResponseSerializer({"detail": "User is not part of any team."})
+        return 400, resp
+
+    if team.life <= 0:
+        resp = SubmitResponseSerializer({"detail": "Game Over! Your team has no lives left."})
+        return 400, resp
+
+    current_node = team.current_node
+    # First node assignment
+    if not current_node:
+        if node.effects == Effects.JUNCTION:
+            resp = SubmitResponseSerializer({"detail": "You cannot start with a junction node."})
+            return 400, resp
+        team.current_node = node
+        team.head = node
+        team.last_checkpoint = node
+        team.save()
+        _record_node_visit(team, node, has_parent=False)
+        record_game_history(
+            team=team,
+            node=node,
+            action="Started game",
+        )
+        data_serializer = NodeSerializer(node)
+        resp = SubmitResponseSerializer(
+            {"detail": "Game started successfully.", "data": data_serializer.data}
+        )
+        return 200, resp
+    else:
+        if current_node == node:
+            resp = SubmitResponseSerializer(
+                {
+                    "detail": "You’ve already submitted this answer. Please choose another one."
+                }
+            )
+            return 400, resp
+
+    # Wrong answer
+    if current_node.id not in (node.parent_id, node.alt_parent_id):
+        team.life = max(0, team.life - 1)
+        team.current_node = team.last_checkpoint
+        team.save()
+        record_game_history(
+            team=team,
+            node=current_node,
+            action="Answered incorrectly",
+        )
+        resp = SubmitResponseSerializer({"detail": "Wrong answer"})
+        return 400, resp
+
+    # Correct answer
+    if node.effects == Effects.JUNCTION:
+        team.last_checkpoint = node
+
+    already_visited = False
+    if not TeamNode.objects.filter(team=team, node=node).exists() or team.head == node:
+        team.score += current_node.score
+
+        if current_node.attack > 0:
+            team.attack += current_node.attack
+            current_node.attack = 0  # Reset attack value after it's been used(Only first collected team get the attack value)
+            current_node.save(update_fields=["attack"])
+
+        if current_node.bonus > 0:
+            team.score += current_node.bonus
+            current_node.bonus = 0  # Reset bonus value after it's been used(Only first collected team get the bonus)
+            current_node.save(update_fields=["bonus"])
+
+        if current_node.life > 0:
+            team.life += current_node.life
+            current_node.life = 0  # Reset life value after it's been used(Only first collected team get the life)
+            current_node.save(update_fields=["life"])
+    else:
+        already_visited = True
+
+    _record_node_visit(team, node)
+    team.current_node = node
+    team.save()
+    record_game_history(
+        team=team,
+        node=node,
+        action="Answered correctly",
+    )
+
+    # Win condition – when the next node points back to the head
+    if node == team.head:
+        team.is_won = True
+        team.save(update_fields=["is_won"])
+        team_serializer = TeamSerializer(team)
+        resp = SubmitResponseSerializer({"detail": "You Win!", "data": team_serializer.data})
+        return 200, resp
+    data_serializer = NodeSerializer(node)
+    data = data_serializer.data
+    if already_visited:
+        data["score"] = 0
+    resp = SubmitResponseSerializer({"detail": "Correct answer", "data": data})
+    return 200, resp
+
+
+def target_attack(attacking_team, target_team_id, attack_value) -> Tuple[int, serializers.Serializer]:
+    try:
+        target_team = Team.objects.get(pk=target_team_id)
+    except Team.DoesNotExist:
+        resp = SubmitResponseSerializer({"detail": "Target team does not exist.", "data": {"target_team_id": target_team_id}})
+        return 400, resp
+
+    if attacking_team.id == target_team.id:
+        resp = SubmitResponseSerializer({"detail": "You cannot attack your own team.", "data": {"target_team": target_team.name}})
+        return 400, resp
+
+    if attacking_team.attack < attack_value:
+        resp = SubmitResponseSerializer({"detail": "Not enough attack points to perform this attack.", "data": {"available_attack_points": attacking_team.attack}})
+        return 400, resp
+
+    # Deduct the life from the target team
+    target_team.life = max(0, target_team.life - attack_value)
+    target_team.save()
+
+    # Deduct the attack points from the attacking team
+    attacking_team.attack -= attack_value
+    attacking_team.save()
+
+    record_game_history(
+        team=attacking_team,
+        node=attacking_team.current_node,
+        action=f"Attacked {target_team.name} for {attack_value} life points",
+    )
+
+    publish(target_team.id, "team_attacked", {
+        "life": target_team.life,
+        "score": target_team.score,
+        "attack": target_team.attack,
+        "attacked_by": attacking_team.name,
+        "damage": attack_value,
+        "detail": f"{attacking_team.name} attacked you for {attack_value} life points.",
+    })
+    publish(attacking_team.id, "team_update", {
+        "life": attacking_team.life,
+        "score": attacking_team.score,
+        "attack": attacking_team.attack,
+        "detail": f"You attacked {target_team.name} for {attack_value} life points.",
+    })
+
+    resp = SubmitResponseSerializer({"detail": f"Successfully attacked {target_team.name} for {attack_value} life points.", "data": {"target_team": target_team.name, "remaining_life": target_team.life}})
+    return 200, resp
+
+
+def establish_node_relation(parent: Node, child: Node) -> Tuple[str, Node]:
+    """
+    Establish parent-child relation between two nodes.
+    - If child already has both parent and alt_parent, disallow setting a new parent.
+    - If child already has a parent, set the new parent as alt_parent.
+    - Only junction nodes can have an alt_parent, or normal nodes if the parent is a junction node.
+    - If setting as primary parent creates a cycle, attempt to set as alt_parent.
+    """
+    from mptt.exceptions import InvalidMove
+
+    if parent.pk == child.pk:
+        raise serializers.ValidationError({"detail": "A node cannot be its own parent."})
+
+    if child.parent_id == parent.id:
+        raise serializers.ValidationError({"detail": "This node is already the parent of the child node."})
+
+    if child.alt_parent_id == parent.id:
+        raise serializers.ValidationError({"detail": "This node is already the alt_parent of the child node."})
+
+    # If child already has both parent and alt_parent
+    if child.parent_id is not None and child.alt_parent_id is not None:
+        raise serializers.ValidationError({"detail": "Child node already has both a parent and an alt_parent."})
+
+    def _set_as_alt_parent(p: Node, c: Node) -> Tuple[str, Node]:
+        if c.alt_parent_id is not None:
+            raise serializers.ValidationError({"detail": "Child node already has an alt_parent."})
+
+        is_child_junction = c.effects == Effects.JUNCTION
+        is_parent_junction = p.effects == Effects.JUNCTION
+
+        if not (is_child_junction or is_parent_junction):
+            raise serializers.ValidationError({
+                "detail": "Only junction nodes can have an alt_parent, or normal nodes if connected to a junction node."
+            })
+
+        c.alt_parent = p
+        c.save(update_fields=['alt_parent'])
+        return 'alt_parent', c
+
+    # If child already has a primary parent, set the new parent as alt_parent
+    if child.parent_id is not None:
+        return _set_as_alt_parent(parent, child)
+
+    # Child does not have a primary parent yet
+    # Check if parent is a descendant of child (would create a cycle in MPTT)
+    is_descendant = False
+    if parent.pk and child.pk:
+        if parent.is_descendant_of(child, include_self=True):
+            is_descendant = True
+
+    if is_descendant:
+        return _set_as_alt_parent(parent, child)
+    else:
+        try:
+            child.parent = parent
+            child.save()
+            return 'parent', child
+        except InvalidMove:
+            return _set_as_alt_parent(parent, child)
+
+
+def remove_node_relation(node1: Node, node2: Node) -> Tuple[bool, list]:
+    """
+    Removes any parent or alt_parent relation between node1 and node2,
+    regardless of which node was the parent or child.
+    """
+    removed = []
+
+    # Check if node1 is parent of node2
+    if node2.parent_id == node1.id:
+        node2.parent = None
+        node2.save()
+        removed.append("parent")
+
+    # Check if node1 is alt_parent of node2
+    if node2.alt_parent_id == node1.id:
+        node2.alt_parent = None
+        node2.save(update_fields=['alt_parent'])
+        removed.append("alt_parent")
+
+    # Check if node2 is parent of node1
+    if node1.parent_id == node2.id:
+        node1.parent = None
+        node1.save()
+        removed.append("parent")
+
+    # Check if node2 is alt_parent of node1
+    if node1.alt_parent_id == node2.id:
+        node1.alt_parent = None
+        node1.save(update_fields=['alt_parent'])
+        removed.append("alt_parent")
+
+    return bool(removed), removed
+
+
+def clear_map_data() -> int:
+    """
+    Deletes all nodes from the map, removing all team node history and resetting team pointers.
+    Returns the count of deleted nodes.
+    """
+    Team.objects.all().update(head=None, current_node=None, last_checkpoint=None)
+    TeamNode.objects.all().delete()
+    deleted_count, _ = Node.objects.all().delete()
+    return deleted_count

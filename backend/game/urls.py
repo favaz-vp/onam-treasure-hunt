@@ -1,5 +1,8 @@
-from django.urls import path
+from rest_framework.routers import DefaultRouter
+from .views import NodeViewSet, MapViewSet
 
-urlpatterns = [
-    # Placeholder for game routes (Map, Session, Node APIs)
-]
+router = DefaultRouter()
+router.register(r'nodes', NodeViewSet, basename='node')
+router.register(r'maps', MapViewSet, basename='map')
+
+urlpatterns = router.urls
