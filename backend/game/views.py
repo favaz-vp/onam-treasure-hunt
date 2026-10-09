@@ -23,6 +23,7 @@ from .serializers import (
     BasicTeamSerializer,
     TargetTeamsResponseSerializer,
     TargetAttackSerializer,
+    MapListSerializer,
     MapGraphResponseSerializer,
     MapSkeletonResponseSerializer,
     EstablishRelationRequestSerializer,
@@ -309,6 +310,7 @@ class NodeViewSet(viewsets.ModelViewSet):
         if not serializer.is_valid():
             return Response(serializer.errors, status=400)
 
+        map_obj = serializer.validated_data['map']
         parent = serializer.validated_data['parent']
         child = serializer.validated_data['child']
 
@@ -328,6 +330,7 @@ class NodeViewSet(viewsets.ModelViewSet):
             {
                 "detail": f"Successfully established relation as {relation_type}",
                 "relation_type": relation_type,
+                "map_id": map_obj.id,
                 "parent_id": parent.id,
                 "child_id": child.id,
             },
@@ -401,24 +404,39 @@ class NodeViewSet(viewsets.ModelViewSet):
 
 class MapViewSet(viewsets.ViewSet):
     """
-    API endpoint that returns the complete cyclic graph map of nodes.
+    API endpoint that returns maps and their complete cyclic graph map of nodes.
     Django MPTT represents the tree hierarchy, while alt_parent and alt_child connect cycles at junction nodes.
     """
     permission_classes = [AllowAny]
     http_method_names = ['get', 'post', 'delete']
 
     @extend_schema(
-        summary="Get Cyclic Graph Map",
+        summary="List Maps",
+        description="Returns a list of all game maps.",
+        responses={200: MapListSerializer(many=True)},
+    )
+    def list(self, request, *args, **kwargs):
+        maps = Map.objects.all().order_by('-created_at')
+        serializer = MapListSerializer(maps, many=True)
+        return Response(serializer.data)
+
+    @extend_schema(
+        summary="Get Cyclic Graph Map by ID",
         description=(
-            "Returns all nodes and directed edges in the cyclic question graph. "
+            "Returns all nodes and directed edges in the cyclic question graph for the specified Map ID. "
             "Edges include primary tree connections (from MPTT parent-child relationships) "
             "as well as alternative cyclic connections (from alt_child and alt_parent at junction nodes). "
             "Also includes team progress states (completed, in-progress, locked) if the user is in a team."
         ),
         responses={200: MapGraphResponseSerializer},
     )
-    def list(self, request, *args, **kwargs):
-        nodes = Node.objects.all().order_by('tree_id', 'lft')
+    def retrieve(self, request, pk=None, *args, **kwargs):
+        try:
+            map_obj = Map.objects.get(pk=pk)
+        except Map.DoesNotExist:
+            return Response({'detail': f'Map with id {pk} does not exist.'}, status=404)
+
+        nodes = Node.objects.filter(map=map_obj).order_by('tree_id', 'lft')
         node_map = {n.id: n for n in nodes}
 
         # Build children map from MPTT parent relation
@@ -503,17 +521,22 @@ class MapViewSet(viewsets.ViewSet):
         return Response(serializer.data)
 
     @extend_schema(
-        summary="Get Map Skeleton",
+        summary="Get Map Skeleton by ID",
         description=(
-            "Returns the static layout skeleton of the game map (nodes, levels, coordinates, "
+            "Returns the static layout skeleton of the game map for the specified Map ID (nodes, levels, coordinates, "
             "and primary/alternative edges) without dynamic player progress or question answers. "
             "This endpoint is publicly accessible, static, and can be aggressively cached by clients."
         ),
         responses={200: MapSkeletonResponseSerializer},
     )
-    @action(detail=False, methods=['get'], url_path='skeleton')
-    def skeleton(self, request, *args, **kwargs):
-        nodes = Node.objects.all().order_by('tree_id', 'lft')
+    @action(detail=True, methods=['get'], url_path='skeleton')
+    def skeleton(self, request, pk=None, *args, **kwargs):
+        try:
+            map_obj = Map.objects.get(pk=pk)
+        except Map.DoesNotExist:
+            return Response({'detail': f'Map with id {pk} does not exist.'}, status=404)
+
+        nodes = Node.objects.filter(map=map_obj).order_by('tree_id', 'lft')
         node_map = {n.id: n for n in nodes}
 
         # Build children map from MPTT parent relation
@@ -580,16 +603,21 @@ class MapViewSet(viewsets.ViewSet):
         return edges_payload
 
     @extend_schema(
-        summary="Clear Map (Delete all nodes)",
-        description="Deletes all nodes from the map/database, removes all team node history, and resets team pointers.",
+        summary="Clear Map by ID (Delete all nodes of this map)",
+        description="Deletes all nodes belonging to this map from the database, removes related team node history, and resets team pointers.",
         responses={200: ClearMapResponseSerializer},
     )
-    @action(detail=False, methods=['delete'], url_path='clear')
-    def clear_map(self, request, *args, **kwargs):
-        deleted_count = clear_map_data()
+    @action(detail=True, methods=['delete'], url_path='clear')
+    def clear_map(self, request, pk=None, *args, **kwargs):
+        try:
+            map_obj = Map.objects.get(pk=pk)
+        except Map.DoesNotExist:
+            return Response({'detail': f'Map with id {pk} does not exist.'}, status=404)
+
+        deleted_count = clear_map_data(map_id=map_obj.id)
         return Response(
             {
-                "detail": "Map cleared successfully. All nodes have been deleted.",
+                "detail": f"Map '{map_obj.name}' cleared successfully. All its nodes have been deleted.",
                 "deleted_nodes_count": deleted_count,
             },
             status=200,

@@ -277,12 +277,20 @@ def remove_node_relation(node1: Node, node2: Node) -> Tuple[bool, list]:
     return bool(removed), removed
 
 
-def clear_map_data() -> int:
+def clear_map_data(map_id: int = None) -> int:
     """
-    Deletes all nodes from the map, removing all team node history and resetting team pointers.
+    Deletes all nodes from the map (or all maps if map_id is None),
+    removing related team node history and resetting team pointers.
     Returns the count of deleted nodes.
     """
-    Team.objects.all().update(head=None, current_node=None, last_checkpoint=None)
-    TeamNode.objects.all().delete()
-    deleted_count, _ = Node.objects.all().delete()
+    if map_id:
+        Team.objects.filter(head__map_id=map_id).update(head=None)
+        Team.objects.filter(current_node__map_id=map_id).update(current_node=None)
+        Team.objects.filter(last_checkpoint__map_id=map_id).update(last_checkpoint=None)
+        TeamNode.objects.filter(node__map_id=map_id).delete()
+        deleted_count, _ = Node.objects.filter(map_id=map_id).delete()
+    else:
+        Team.objects.all().update(head=None, current_node=None, last_checkpoint=None)
+        TeamNode.objects.all().delete()
+        deleted_count, _ = Node.objects.all().delete()
     return deleted_count
